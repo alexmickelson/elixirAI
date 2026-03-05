@@ -1,4 +1,12 @@
 import Config
+import Dotenvy
+
+source!([".env", System.get_env()])
+
+config :elixir_ai,
+  ai_endpoint: env!("AI_RESPONSES_ENDPOINT", :string!),
+  ai_token: env!("AI_TOKEN", :string!),
+  ai_model: env!("AI_MODEL", :string!)
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
@@ -81,5 +89,4 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
-
- end
+end

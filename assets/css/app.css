@@ -14,3 +14,99 @@
 @variant phx-change-loading (&.phx-change-loading, .phx-change-loading &);
 
 /* This file is for your main application CSS */
+
+/* Form Elements */
+label {
+  @apply block text-sm font-medium text-cyan-300 mb-1;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
+textarea,
+select {
+  @apply w-full rounded-md px-3 py-2 text-sm
+         bg-cyan-950 text-cyan-50 placeholder-cyan-600
+         border border-cyan-800
+         outline-none
+         transition-colors duration-150
+         focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500;
+}
+
+textarea {
+  @apply resize-y min-h-24;
+}
+
+button[type="submit"],
+input[type="submit"] {
+  @apply px-4 py-2 rounded-md text-sm font-medium
+         bg-cyan-600 text-white
+         border border-cyan-500
+         transition-colors duration-150
+         hover:bg-cyan-500
+         disabled:opacity-40 disabled:cursor-not-allowed;
+}
+
+fieldset {
+  @apply border border-cyan-800 rounded-md px-4 py-3;
+}
+
+legend {
+  @apply text-sm font-semibold text-cyan-400 px-1;
+}
+
+/* Spinner */
+.loader {
+  width: 48px;
+  height: 48px;
+  display: inline-block;
+  position: relative;
+  transform: rotate(45deg);
+}
+.loader::before {
+  content: '';
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  position: absolute;
+  left: 0;
+  top: -24px;
+  animation: animloader 4s ease infinite;
+}
+.loader::after {
+  content: '';
+  box-sizing: border-box;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+  animation: animloader2 2s ease infinite;
+}
+
+@keyframes animloader {
+  0%   { box-shadow: 0 24px rgba(255,255,255,0), 24px 24px rgba(255,255,255,0), 24px 48px rgba(255,255,255,0), 0px 48px rgba(255,255,255,0); }
+  12%  { box-shadow: 0 24px white, 24px 24px rgba(255,255,255,0), 24px 48px rgba(255,255,255,0), 0px 48px rgba(255,255,255,0); }
+  25%  { box-shadow: 0 24px white, 24px 24px white, 24px 48px rgba(255,255,255,0), 0px 48px rgba(255,255,255,0); }
+  37%  { box-shadow: 0 24px white, 24px 24px white, 24px 48px white, 0px 48px rgba(255,255,255,0); }
+  50%  { box-shadow: 0 24px white, 24px 24px white, 24px 48px white, 0px 48px white; }
+  62%  { box-shadow: 0 24px rgba(255,255,255,0), 24px 24px white, 24px 48px white, 0px 48px white; }
+  75%  { box-shadow: 0 24px rgba(255,255,255,0), 24px 24px rgba(255,255,255,0), 24px 48px white, 0px 48px white; }
+  87%  { box-shadow: 0 24px rgba(255,255,255,0), 24px 24px rgba(255,255,255,0), 24px 48px rgba(255,255,255,0), 0px 48px white; }
+  100% { box-shadow: 0 24px rgba(255,255,255,0), 24px 24px rgba(255,255,255,0), 24px 48px rgba(255,255,255,0), 0px 48px rgba(255,255,255,0); }
+}
+
+@keyframes animloader2 {
+  0%   { transform: translate(0, 0) rotateX(0) rotateY(0); }
+  25%  { transform: translate(100%, 0) rotateX(0) rotateY(180deg); }
+  50%  { transform: translate(100%, 100%) rotateX(-180deg) rotateY(180deg); }
+  75%  { transform: translate(0, 100%) rotateX(-180deg) rotateY(360deg); }
+  100% { transform: translate(0, 0) rotateX(0) rotateY(360deg); }
+}
+
+

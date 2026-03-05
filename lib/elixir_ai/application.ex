@@ -8,6 +8,7 @@ defmodule ElixirAi.Application do
       ElixirAiWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:elixir_ai, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
+      ElixirAi.ChatRunner,
       ElixirAiWeb.Endpoint
     ]
 
