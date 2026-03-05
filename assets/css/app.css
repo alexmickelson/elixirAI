@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@source "../js/**/*.js";
+@source "../../lib/elixir_ai_web.ex";
+@source "../../lib/elixir_ai_web/**/*.*ex";
+@plugin "@tailwindcss/forms";
+@plugin "../heroicons_plugin.js";
+
+@theme {
+}
+
+@variant phx-click-loading (&.phx-click-loading, .phx-click-loading &);
+@variant phx-submit-loading (&.phx-submit-loading, .phx-submit-loading &);
+@variant phx-change-loading (&.phx-change-loading, .phx-change-loading &);
+
+/* This file is for your main application CSS */
