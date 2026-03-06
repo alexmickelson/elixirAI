@@ -4,8 +4,7 @@ defmodule ElixirAiWeb.ChatLive do
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
   alias ElixirAi.ChatRunner
-
-  @topic "ai_chat"
+  alias ElixirAi.ConversationManager
 
   def valid_background_colors do
     [
@@ -19,23 +18,35 @@ defmodule ElixirAiWeb.ChatLive do
     ]
   end
 
-  def mount(_params, _session, socket) do
-    if connected?(socket), do: Phoenix.PubSub.subscribe(ElixirAi.PubSub, @topic)
-    conversation = ChatRunner.get_conversation()
+  def mount(%{"name" => name}, _session, socket) do
+    case ConversationManager.open_conversation(name) do
+      {:ok, _pid} ->
+        if connected?(socket),
+          do: Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_chat:#{name}")
 
-    {:ok,
-     socket
-     |> assign(user_input: "")
-     |> assign(messages: conversation.messages)
-     |> assign(streaming_response: nil)
-     |> assign(background_color: "bg-cyan-950/30")}
+        conversation = ChatRunner.get_conversation(name)
+
+        {:ok,
+         socket
+         |> assign(conversation_name: name)
+         |> assign(user_input: "")
+         |> assign(messages: conversation.messages)
+         |> assign(streaming_response: conversation.streaming_response)
+         |> assign(background_color: "bg-cyan-950/30")}
+
+      {:error, :not_found} ->
+        {:ok, push_navigate(socket, to: "/")}
+    end
   end
 
   def render(assigns) do
     ~H"""
     <div class="flex flex-col h-full  rounded-lg">
-      <div class="px-4 py-3 font-semibold ">
-        Live Chat
+      <div class="px-4 py-3 font-semibold flex items-center gap-3">
+        <.link navigate={~p"/"} class="text-cyan-700 hover:text-cyan-400 transition-colors">
+          ←
+        </.link>
+        {@conversation_name}
       </div>
       <div
         id="chat-messages"
@@ -88,7 +99,7 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
-    ChatRunner.new_user_message(user_input)
+    ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
     {:noreply, assign(socket, user_input: "")}
   end
 
@@ -104,6 +115,15 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, streaming_response: starting_response)}
   end
 
+  # chunk arrived before :start_ai_response_stream — fetch snapshot from runner and apply
+  def handle_info(
+        {:reasoning_chunk_content, reasoning_content},
+        %{assigns: %{streaming_response: nil}} = socket
+      ) do
+    base = get_snapshot(socket) |> Map.update!(:reasoning_content, &(&1 <> reasoning_content))
+    {:noreply, assign(socket, streaming_response: base)}
+  end
+
   def handle_info({:reasoning_chunk_content, reasoning_content}, socket) do
     updated_response = %{
       socket.assigns.streaming_response
@@ -112,6 +132,14 @@ defmodule ElixirAiWeb.ChatLive do
     }
 
     {:noreply, assign(socket, streaming_response: updated_response)}
+  end
+
+  def handle_info(
+        {:text_chunk_content, text_content},
+        %{assigns: %{streaming_response: nil}} = socket
+      ) do
+    base = get_snapshot(socket) |> Map.update!(:content, &(&1 <> text_content))
+    {:noreply, assign(socket, streaming_response: base)}
   end
 
   def handle_info({:text_chunk_content, text_content}, socket) do
@@ -157,5 +185,13 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_info({:set_background_color, color}, socket) do
     Logger.info("setting background color to #{color}")
     {:noreply, assign(socket, background_color: color)}
+  end
+
+  defp get_snapshot(socket) do
+    ChatRunner.get_streaming_response(socket.assigns.conversation_name)
+    |> case do
+      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
+      snapshot -> snapshot
+    end
   end
 end

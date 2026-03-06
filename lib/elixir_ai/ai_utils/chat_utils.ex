@@ -68,7 +68,8 @@ defmodule ElixirAi.ChatUtils do
                {:cont, acc}
              end
            ) do
-        {:ok, _} ->
+        {:ok, _response} ->
+          # Logger.info("AI request completed with response #{inspect(response)}")
           :ok
 
         {:error, reason} ->

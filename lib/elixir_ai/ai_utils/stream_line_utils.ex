@@ -34,10 +34,15 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
   end
 
   # last streamed response
-  def handle_stream_line(server, %{
-        "choices" => [%{"finish_reason" => "stop"}],
-        "id" => id
-      }) do
+  def handle_stream_line(
+        server,
+        %{
+          "choices" => [%{"finish_reason" => "stop"}],
+          "id" => id
+        } = msg
+      ) do
+    Logger.info("Received end of AI response stream for id #{id} with message: #{inspect(msg)}")
+
     send(
       server,
       {:ai_text_stream_finish, id}
@@ -113,11 +118,14 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
   end
 
   # end tool call
-  def handle_stream_line(server, %{
-        "choices" => [%{"finish_reason" => "tool_calls"}],
-        "id" => id
-      }) do
-    # Logger.info("Received tool call end")
+  def handle_stream_line(
+        server,
+        %{
+          "choices" => [%{"finish_reason" => "tool_calls"}],
+          "id" => id
+        } = message
+      ) do
+    Logger.info("Received tool_calls_finished with message: #{inspect(message)}")
     send(server, {:ai_tool_call_end, id})
   end
 

@@ -8,9 +8,11 @@ defmodule ElixirAi.Application do
       ElixirAiWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:elixir_ai, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
-      ElixirAi.ChatRunner,
       ElixirAi.ToolTesting,
-      ElixirAiWeb.Endpoint
+      ElixirAiWeb.Endpoint,
+      {Registry, keys: :unique, name: ElixirAi.ChatRegistry},
+      {DynamicSupervisor, name: ElixirAi.ChatRunnerSupervisor, strategy: :one_for_one},
+      ElixirAi.ConversationManager
     ]
 
     opts = [strategy: :one_for_one, name: ElixirAi.Supervisor]
