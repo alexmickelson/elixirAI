@@ -39,25 +39,6 @@ defmodule ElixirAi.ToolTesting do
     }
   end
 
-  def set_background_color(%{"color" => color}) do
-    Phoenix.PubSub.broadcast(ElixirAi.PubSub, "ai_chat", {:set_background_color, color})
-  end
-
-  def set_background_color_params do
-    valid_tailwind_colors = ElixirAiWeb.ChatLive.valid_background_colors()
-
-    %{
-      "type" => "object",
-      "properties" => %{
-        "color" => %{
-          "type" => "string",
-          "enum" => valid_tailwind_colors
-        }
-      },
-      "required" => ["color"]
-    }
-  end
-
   def read_thing_definition(name) do
     %{
       "type" => "function",

@@ -56,7 +56,6 @@ defmodule ElixirAi.ChatUtils do
 
       headers = [{"authorization", "Bearer #{api_key}"}]
 
-      # Logger.info("sending AI request with body: #{inspect(body)}")
       case Req.post(api_url,
              json: body,
              headers: headers,
@@ -69,7 +68,6 @@ defmodule ElixirAi.ChatUtils do
              end
            ) do
         {:ok, _response} ->
-          # Logger.info("AI request completed with response #{inspect(response)}")
           :ok
 
         {:error, reason} ->

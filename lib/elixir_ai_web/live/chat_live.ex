@@ -160,7 +160,7 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info(:tool_calls_finished, socket) do
-    Logger.info("Received tool_calls_finished")
+    # Logger.info("Received tool_calls_finished")
 
     {:noreply,
      socket
@@ -168,7 +168,7 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:tool_request_message, tool_request_message}, socket) do
-    Logger.info("tool request message: #{inspect(tool_request_message)}")
+    # Logger.info("tool request message: #{inspect(tool_request_message)}")
 
     {:noreply,
      socket
@@ -176,8 +176,6 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:one_tool_finished, tool_response}, socket) do
-    Logger.info("Received one_tool_finished with #{inspect(tool_response)}")
-
     {:noreply,
      socket
      |> update(:messages, &(&1 ++ [tool_response]))}

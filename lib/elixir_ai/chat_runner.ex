@@ -29,11 +29,11 @@ defmodule ElixirAi.ChatRunner do
       messages: [],
       streaming_response: nil,
       pending_tool_calls: [],
-      tools: tools(self())
+      tools: tools(self(), name)
     }}
   end
 
-  def tools(server) do
+  def tools(server, name) do
     [
       ai_tool(
         name: "store_thing",
@@ -53,8 +53,19 @@ defmodule ElixirAi.ChatRunner do
         name: "set_background_color",
         description:
           "set the background color of the chat interface, accepts specified tailwind colors",
-        function: &ElixirAi.ToolTesting.set_background_color/1,
-        parameters: ElixirAi.ToolTesting.set_background_color_params(),
+        function: fn %{"color" => color} ->
+          Phoenix.PubSub.broadcast(ElixirAi.PubSub, "ai_chat:#{name}", {:set_background_color, color})
+        end,
+        parameters: %{
+          "type" => "object",
+          "properties" => %{
+            "color" => %{
+              "type" => "string",
+              "enum" => ElixirAiWeb.ChatLive.valid_background_colors()
+            }
+          },
+          "required" => ["color"]
+        },
         server: server
       )
     ]
@@ -182,7 +193,7 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def handle_info({:ai_tool_call_end, id}, state) do
-    Logger.info("ending tool call with tools: #{inspect(state.streaming_response.tool_calls)}")
+    # Logger.info("ending tool call with tools: #{inspect(state.streaming_response.tool_calls)}")
 
     tool_request_message = %{
       role: :assistant,

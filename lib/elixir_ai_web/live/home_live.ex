@@ -55,7 +55,6 @@ defmodule ElixirAiWeb.HomeLive do
     """
   end
 
-  @spec handle_event(<<_::48>>, map(), any()) :: {:noreply, any()}
   def handle_event("create", %{"name" => name}, socket) do
     name = String.trim(name)
 

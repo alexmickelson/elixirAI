@@ -39,9 +39,9 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         %{
           "choices" => [%{"finish_reason" => "stop"}],
           "id" => id
-        } = msg
+        } = _msg
       ) do
-    Logger.info("Received end of AI response stream for id #{id} with message: #{inspect(msg)}")
+    # Logger.info("Received end of AI response stream for id #{id} with message: #{inspect(msg)}")
 
     send(
       server,
@@ -125,7 +125,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
           "id" => id
         } = message
       ) do
-    Logger.info("Received tool_calls_finished with message: #{inspect(message)}")
+    # Logger.info("Received tool_calls_finished with message: #{inspect(message)}")
     send(server, {:ai_tool_call_end, id})
   end
 
