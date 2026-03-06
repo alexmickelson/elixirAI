@@ -20,6 +20,7 @@ defmodule ElixirAi.ChatRunner do
       %{
         messages: [],
         streaming_response: nil,
+        pending_tool_calls: [],
         tools: tools()
       },
       name: __MODULE__
@@ -36,20 +37,23 @@ defmodule ElixirAi.ChatRunner do
         name: "store_thing",
         description: "store a key value pair in memory",
         function: &ElixirAi.ToolTesting.hold_thing/1,
-        parameters: ElixirAi.ToolTesting.hold_thing_params()
+        parameters: ElixirAi.ToolTesting.hold_thing_params(),
+        server: __MODULE__
       ),
       ai_tool(
         name: "read_thing",
         description: "read a key value pair that was previously stored with store_thing",
         function: &ElixirAi.ToolTesting.get_thing/1,
-        parameters: ElixirAi.ToolTesting.get_thing_params()
+        parameters: ElixirAi.ToolTesting.get_thing_params(),
+        server: __MODULE__
       ),
       ai_tool(
         name: "set_background_color",
         description:
           "set the background color of the chat interface, accepts specified tailwind colors",
         function: &ElixirAi.ToolTesting.set_background_color/1,
-        parameters: ElixirAi.ToolTesting.set_background_color_params()
+        parameters: ElixirAi.ToolTesting.set_background_color_params(),
+        server: __MODULE__
       )
     ]
   end
@@ -108,12 +112,10 @@ defmodule ElixirAi.ChatRunner do
      }}
   end
 
-  def handle_info({:ai_stream_finish, _id}, state) do
+  def handle_info({:ai_text_stream_finish, _id}, state) do
     Logger.info(
       "AI stream finished for id #{state.streaming_response.id}, broadcasting end of AI response"
     )
-
-    broadcast(:end_ai_response)
 
     final_message = %{
       role: :assistant,
@@ -121,6 +123,8 @@ defmodule ElixirAi.ChatRunner do
       reasoning_content: state.streaming_response.reasoning_content,
       tool_calls: state.streaming_response.tool_calls
     }
+
+    broadcast({:end_ai_response, final_message})
 
     {:noreply,
      %{
@@ -175,20 +179,17 @@ defmodule ElixirAi.ChatRunner do
     {:noreply, %{state | streaming_response: new_streaming_response}}
   end
 
-  def handle_info({:ai_tool_call_end, _id}, state) do
+  def handle_info({:ai_tool_call_end, id}, state) do
     Logger.info("ending tool call with tools: #{inspect(state.streaming_response.tool_calls)}")
 
-    tool_calls =
+    parsed_tool_calls =
       Enum.map(state.streaming_response.tool_calls, fn tool_call ->
         case Jason.decode(tool_call.arguments) do
           {:ok, decoded_args} ->
-            tool = state.tools |> Enum.find(fn t -> t.name == tool_call.name end)
-
-            res = tool.function.(decoded_args)
-            Map.put(tool_call, :result, res)
+            {:ok, tool_call, decoded_args}
 
           {:error, e} ->
-            Map.put(tool_call, :error, "Failed to decode tool arguments: #{inspect(e)}")
+            {:error, tool_call, "Failed to decode tool arguments: #{inspect(e)}"}
         end
       end)
 
@@ -196,26 +197,79 @@ defmodule ElixirAi.ChatRunner do
       role: :assistant,
       content: state.streaming_response.content,
       reasoning_content: state.streaming_response.reasoning_content,
-      tool_calls: tool_calls
+      tool_calls: state.streaming_response.tool_calls
     }
 
-    result_messages =
-      Enum.map(tool_calls, fn call ->
-        if Map.has_key?(call, :result) do
-          %{role: :tool, content: "#{inspect(call.result)}", tool_call_id: call.id}
-        else
-          %{role: :tool, content: "Error in #{call.name}: #{call.error}", tool_call_id: call.id}
-        end
+    broadcast({:tool_request_message, tool_request_message})
+
+    failed_call_messages =
+      parsed_tool_calls
+      |> Enum.filter(fn
+        {:error, _tool_call, _error_msg} -> true
+        _ -> false
+      end)
+      |> Enum.map(fn {:error, tool_call, error_msg} ->
+        Logger.error("Tool call #{tool_call.name} failed with error: #{error_msg}")
+        %{role: :tool, content: error_msg, tool_call_id: tool_call.id}
       end)
 
-    new_messages = [tool_request_message] ++ result_messages
+    pending_call_ids =
+      parsed_tool_calls
+      |> Enum.filter(fn
+        {:ok, _tool_call, _decoded_args} -> true
+        _ -> false
+      end)
+      |> Enum.map(fn {:ok, tool_call, decoded_args} ->
+        case Enum.find(state.tools, fn t -> t.name == tool_call.name end) do
+          nil ->
+            Logger.error("No tool definition found for #{tool_call.name}")
+            nil
 
-    Logger.info("All tool calls finished, broadcasting updated tool calls with results")
-    broadcast({:tool_calls_finished, new_messages})
+          tool ->
+            tool.run_function.(id, tool_call.id, decoded_args)
 
-    request_ai_response(self(), state.messages ++ new_messages, state.tools)
+            tool_call.id
+        end
+      end)
+      |> Enum.filter(& &1)
 
-    {:noreply, %{state | messages: state.messages ++ new_messages, streaming_response: nil}}
+    {:noreply,
+     %{
+       state
+       | messages: state.messages ++ [tool_request_message] ++ failed_call_messages,
+         pending_tool_calls: pending_call_ids
+     }}
+  end
+
+  def handle_info({:tool_response, _id, tool_call_id, result}, state) do
+    new_message = %{role: :tool, content: inspect(result), tool_call_id: tool_call_id}
+
+    broadcast({:one_tool_finished, new_message})
+
+    new_pending_tool_calls =
+      Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
+
+    new_streaming_response =
+      case new_pending_tool_calls do
+        [] ->
+          nil
+
+        _ ->
+          state.streaming_response
+      end
+
+    if new_pending_tool_calls == [] do
+      broadcast(:tool_calls_finished)
+      request_ai_response(self(), state.messages ++ [new_message], state.tools)
+    end
+
+    {:noreply,
+     %{
+       state
+       | pending_tool_calls: new_pending_tool_calls,
+         streaming_response: new_streaming_response,
+         messages: state.messages ++ [new_message]
+     }}
   end
 
   def handle_call(:get_conversation, _from, state) do

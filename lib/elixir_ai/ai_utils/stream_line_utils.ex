@@ -40,7 +40,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
       }) do
     send(
       server,
-      {:ai_stream_finish, id}
+      {:ai_text_stream_finish, id}
     )
   end
 

@@ -42,7 +42,7 @@ defmodule ElixirAiWeb.ChatMessage do
   def assistant_message(assigns) do
     assigns =
       assigns
-      |> assign(:_reasoning_id, "reasoning-#{:erlang.phash2(assigns.content)}")
+      |> assign(:_reasoning_id, "reasoning-#{:erlang.phash2({assigns.content, assigns.reasoning_content, assigns.tool_calls})}")
       |> assign(:_expanded, false)
 
     ~H"""

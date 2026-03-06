@@ -7,6 +7,18 @@ defmodule ElixirAiWeb.ChatLive do
 
   @topic "ai_chat"
 
+  def valid_background_colors do
+    [
+      "bg-cyan-950/30",
+      "bg-red-950/30",
+      "bg-green-950/30",
+      "bg-blue-950/30",
+      "bg-yellow-950/30",
+      "bg-purple-950/30",
+      "bg-pink-950/30"
+    ]
+  end
+
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(ElixirAi.PubSub, @topic)
     conversation = ChatRunner.get_conversation()
@@ -111,35 +123,39 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, streaming_response: updated_response)}
   end
 
-  def handle_info({:tool_calls_finished, tool_messages}, socket) do
-    Logger.info("Received tool_calls_finished with #{inspect(tool_messages)}")
+  def handle_info(:tool_calls_finished, socket) do
+    Logger.info("Received tool_calls_finished")
 
     {:noreply,
      socket
-     |> update(:messages, &(&1 ++ tool_messages))
      |> assign(streaming_response: nil)}
   end
 
-  # tool_calls_finished already cleared streaming_response and committed messages — ignore
-  def handle_info(:end_ai_response, %{assigns: %{streaming_response: nil}} = socket) do
-    {:noreply, socket}
-  end
-
-  def handle_info(:end_ai_response, socket) do
-    final_response = %{
-      role: :assistant,
-      content: socket.assigns.streaming_response.content,
-      reasoning_content: socket.assigns.streaming_response.reasoning_content,
-      tool_calls: socket.assigns.streaming_response.tool_calls
-    }
+  def handle_info({:tool_request_message, tool_request_message}, socket) do
+    Logger.info("tool request message: #{inspect(tool_request_message)}")
 
     {:noreply,
      socket
-     |> update(:messages, &(&1 ++ [final_response]))
+     |> update(:messages, &(&1 ++ [tool_request_message]))}
+  end
+
+  def handle_info({:one_tool_finished, tool_response}, socket) do
+    Logger.info("Received one_tool_finished with #{inspect(tool_response)}")
+
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [tool_response]))}
+  end
+
+  def handle_info({:end_ai_response, final_message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [final_message]))
      |> assign(streaming_response: nil)}
   end
 
   def handle_info({:set_background_color, color}, socket) do
+    Logger.info("setting background color to #{color}")
     {:noreply, assign(socket, background_color: color)}
   end
 end

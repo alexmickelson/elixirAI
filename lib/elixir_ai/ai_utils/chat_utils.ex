@@ -6,7 +6,8 @@ defmodule ElixirAi.ChatUtils do
         name: name,
         description: description,
         function: function,
-        parameters: parameters
+        parameters: parameters,
+        server: server
       ) do
     schema = %{
       "type" => "function",
@@ -25,10 +26,18 @@ defmodule ElixirAi.ChatUtils do
       }
     }
 
+    run_function = fn current_message_id, tool_call_id, args ->
+      Task.start(fn ->
+        result = function.(args)
+        send(server, {:tool_response, current_message_id, tool_call_id, result})
+      end)
+    end
+
     %{
       name: name,
       definition: schema,
-      function: function
+      # function: function,
+      run_function: run_function
     }
   end
 

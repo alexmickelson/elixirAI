@@ -44,15 +44,7 @@ defmodule ElixirAi.ToolTesting do
   end
 
   def set_background_color_params do
-    valid_tailwind_colors = [
-      "bg-cyan-950/30",
-      "bg-red-950/30",
-      "bg-green-950/30",
-      "bg-blue-950/30",
-      "bg-yellow-950/30",
-      "bg-purple-950/30",
-      "bg-pink-950/30"
-    ]
+    valid_tailwind_colors = ElixirAiWeb.ChatLive.valid_background_colors()
 
     %{
       "type" => "object",
