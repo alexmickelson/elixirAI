@@ -1,0 +1,55 @@
+defmodule ElixirAi.ToolTesting do
+  use GenServer
+
+  def hold_thing(thing) do
+    GenServer.cast(__MODULE__, {:hold_thing, thing})
+  end
+
+  def get_thing do
+    GenServer.call(__MODULE__, :get_thing)
+  end
+
+  def store_thing_definition(name) do
+    %{
+      "type" => "function",
+      "function" => %{
+        "name" => name,
+        "description" => "store key value pair",
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{
+            "name" => %{"type" => "string"},
+            "value" => %{"type" => "string"}
+          },
+          "required" => ["name", "value"]
+        }
+      }
+    }
+  end
+
+  def read_thing_definition(name) do
+    %{
+      "type" => "function",
+      "function" => %{
+        "name" => name,
+        "description" => "read key value pair that was previously stored with store_thing"
+      }
+    }
+  end
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  end
+
+  def init(args) do
+    {:ok, args}
+  end
+
+  def handle_cast({:hold_thing, thing}, _state) do
+    {:noreply, thing}
+  end
+
+  def handle_call(:get_thing, _from, state) do
+    {:reply, state, state}
+  end
+end

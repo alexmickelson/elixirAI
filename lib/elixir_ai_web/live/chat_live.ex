@@ -2,13 +2,13 @@ defmodule ElixirAiWeb.ChatLive do
   use ElixirAiWeb, :live_view
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
-  import ElixirAi.ChatRunner
+  alias ElixirAi.ChatRunner
 
   @topic "ai_chat"
 
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(ElixirAi.PubSub, @topic)
-    conversation = get_conversation()
+    conversation = ChatRunner.get_conversation()
 
     {:ok,
      socket
@@ -31,13 +31,18 @@ defmodule ElixirAiWeb.ChatLive do
           <%= if msg.role == :user do %>
             <.user_message content={msg.content} />
           <% else %>
-            <.assistant_message content={msg.content} reasoning_content={msg.reasoning_content} />
+            <.assistant_message
+              content={msg.content}
+              reasoning_content={msg.reasoning_content}
+              tool_calls={Map.get(msg, :tool_calls, [])}
+            />
           <% end %>
         <% end %>
         <%= if @streaming_response do %>
-          <.assistant_message
+          <.streaming_assistant_message
             content={@streaming_response.content}
             reasoning_content={@streaming_response.reasoning_content}
+            tool_calls={@streaming_response.tool_calls}
           />
           <.spinner />
         <% end %>
@@ -62,7 +67,7 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
-    ElixirAi.ChatRunner.new_user_message(user_input)
+    ChatRunner.new_user_message(user_input)
     {:noreply, assign(socket, user_input: "")}
   end
 
@@ -95,6 +100,13 @@ defmodule ElixirAiWeb.ChatLive do
     }
 
     {:noreply, assign(socket, streaming_response: updated_response)}
+  end
+
+  def handle_info({:tool_calls_finished, final_message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [final_message]))
+     |> assign(streaming_response: nil)}
   end
 
   def handle_info(:end_ai_response, socket) do

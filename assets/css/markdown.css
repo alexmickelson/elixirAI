@@ -33,17 +33,14 @@
   @apply text-sm text-cyan-100;
 }
 
-/* Paragraphs */
 .markdown p {
   @apply my-3;
 }
 
-/* Links */
 .markdown a {
   @apply text-cyan-400 underline underline-offset-2 transition-colors duration-150 hover:text-cyan-300;
 }
 
-/* Strong / Em */
 .markdown strong {
   @apply font-bold text-cyan-100;
 }
@@ -51,12 +48,10 @@
   @apply italic text-cyan-200;
 }
 
-/* Inline code */
 .markdown code {
   @apply font-mono text-sm bg-cyan-950 text-cyan-300 px-1 py-0.5 rounded border border-cyan-900;
 }
 
-/* Code blocks */
 .markdown pre {
   @apply bg-cyan-950 border border-cyan-900 rounded-lg px-5 py-4 overflow-x-auto my-4;
 }
@@ -64,17 +59,13 @@
   @apply bg-transparent border-0 p-0 text-sm text-cyan-100;
 }
 
-/* Blockquote */
 .markdown blockquote {
   @apply border-l-2 border-cyan-700 my-4 px-4 py-2 bg-cyan-950 text-cyan-200 rounded-r italic;
 }
 
-/* Horizontal rule */
 .markdown hr {
   @apply border-0 border-t border-cyan-900 my-6;
 }
-
-/* Lists */
 .markdown ul,
 .markdown ol {
   @apply my-3 pl-6;
@@ -92,7 +83,6 @@
   @apply text-cyan-700;
 }
 
-/* Nested lists */
 .markdown ul ul,
 .markdown ol ul {
   list-style-type: circle;
@@ -101,7 +91,6 @@
   list-style-type: square;
 }
 
-/* Tables */
 .markdown table {
   @apply w-full border-collapse my-4 text-sm;
 }
@@ -118,12 +107,10 @@
   @apply bg-cyan-950;
 }
 
-/* Images */
 .markdown img {
   @apply max-w-full rounded-md border border-cyan-900 my-2;
 }
 
-/* Task list checkboxes (GitHub-flavored) */
 .markdown input[type="checkbox"] {
   @apply accent-cyan-700 mr-1;
 }
