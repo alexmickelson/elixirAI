@@ -9,6 +9,7 @@ defmodule ElixirAi.ChatRunner do
     GenServer.cast(__MODULE__, {:user_message, text_content})
   end
 
+  @spec get_conversation() :: any()
   def get_conversation do
     GenServer.call(__MODULE__, :get_conversation)
   end
@@ -19,7 +20,7 @@ defmodule ElixirAi.ChatRunner do
       %{
         messages: [],
         streaming_response: nil,
-        turn: :user
+        tools: tools()
       },
       name: __MODULE__
     )
@@ -30,29 +31,28 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def tools do
-    %{
-      "store_thing" => %{
-        definition: ElixirAi.ToolTesting.store_thing_definition("store_thing"),
-        function: &ElixirAi.ToolTesting.hold_thing/1
-      },
-      "read_thing" => %{
-        definition: ElixirAi.ToolTesting.read_thing_definition("read_thing"),
-        function: &ElixirAi.ToolTesting.get_thing/1
-      }
-    }
+    [
+      ai_tool(
+        name: "store_thing",
+        description: "store a key value pair in memory",
+        function: &ElixirAi.ToolTesting.hold_thing/1,
+        parameters: ElixirAi.ToolTesting.hold_thing_params()
+      ),
+      ai_tool(
+        name: "read_thing",
+        description: "read a key value pair that was previously stored with store_thing",
+        function: &ElixirAi.ToolTesting.get_thing/1,
+        parameters: ElixirAi.ToolTesting.get_thing_params()
+      )
+    ]
   end
 
   def handle_cast({:user_message, text_content}, state) do
     new_message = %{role: :user, content: text_content}
     broadcast({:user_chat_message, new_message})
-    new_state = %{state | messages: state.messages ++ [new_message], turn: :assistant}
+    new_state = %{state | messages: state.messages ++ [new_message]}
 
-    tools =
-      tools()
-      |> Enum.map(fn {name, %{definition: definition}} -> {name, definition} end)
-      |> Enum.into(%{})
-
-    request_ai_response(self(), new_state.messages, tools)
+    request_ai_response(self(), new_state.messages, state.tools)
     {:noreply, new_state}
   end
 
@@ -102,7 +102,10 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def handle_info({:ai_stream_finish, _id}, state) do
-    Logger.info("AI stream finished for id #{state.streaming_response.id}, broadcasting end of AI response")
+    Logger.info(
+      "AI stream finished for id #{state.streaming_response.id}, broadcasting end of AI response"
+    )
+
     broadcast(:end_ai_response)
 
     final_message = %{
@@ -116,8 +119,7 @@ defmodule ElixirAi.ChatRunner do
      %{
        state
        | streaming_response: nil,
-         messages: state.messages ++ [final_message],
-         turn: :user
+         messages: state.messages ++ [final_message]
      }}
   end
 
@@ -173,8 +175,9 @@ defmodule ElixirAi.ChatRunner do
       Enum.map(state.streaming_response.tool_calls, fn tool_call ->
         case Jason.decode(tool_call.arguments) do
           {:ok, decoded_args} ->
-            tool_function = tools()[tool_call.name].function
-            res = tool_function.(decoded_args)
+            tool = state.tools |> Enum.find(fn t -> t.name == tool_call.name end)
+
+            res = tool.function.(decoded_args)
             Map.put(tool_call, :result, res)
 
           {:error, e} ->
@@ -203,8 +206,9 @@ defmodule ElixirAi.ChatRunner do
     Logger.info("All tool calls finished, broadcasting updated tool calls with results")
     broadcast({:tool_calls_finished, new_messages})
 
-    {:noreply,
-     %{state | messages: state.messages ++ new_messages, streaming_response: nil}}
+    request_ai_response(self(), state.messages ++ new_messages, state.tools)
+
+    {:noreply, %{state | messages: state.messages ++ new_messages, streaming_response: nil}}
   end
 
   def handle_call(:get_conversation, _from, state) do

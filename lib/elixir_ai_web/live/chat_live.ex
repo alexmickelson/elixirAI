@@ -24,7 +24,7 @@ defmodule ElixirAiWeb.ChatLive do
       <div class="px-4 py-3 font-semibold ">
         Live Chat
       </div>
-      <div class="flex-1 overflow-y-auto p-4 bg-cyan-950/30 rounded-lg">
+      <div id="chat-messages" phx-hook="ScrollBottom" class="flex-1 overflow-y-auto p-4 bg-cyan-950/30 rounded-lg">
         <%= if @messages == [] do %>
           <p class="text-sm text-center mt-4">No messages yet.</p>
         <% end %>

@@ -5,12 +5,27 @@ defmodule ElixirAi.ToolTesting do
     GenServer.cast(__MODULE__, {:hold_thing, thing})
   end
 
-  def get_thing do
-    GenServer.call(__MODULE__, :get_thing)
+  def hold_thing_params do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "name" => %{"type" => "string"},
+        "value" => %{"type" => "string"}
+      },
+      "required" => ["name", "value"]
+    }
   end
 
   def get_thing(_) do
     GenServer.call(__MODULE__, :get_thing)
+  end
+
+  def get_thing_params do
+    %{
+      "type" => "object",
+      "properties" => %{},
+      "required" => []
+    }
   end
 
   def store_thing_definition(name) do

@@ -22,9 +22,35 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
+let Hooks = {}
+
+Hooks.ScrollBottom = {
+  mounted() {
+    this.scrollToBottom()
+    this.observer = new MutationObserver(() => {
+      if (this.isNearBottom()) this.scrollToBottom()
+    })
+    this.observer.observe(this.el, {childList: true, subtree: true})
+  },
+  updated() {
+    if (this.isNearBottom()) this.scrollToBottom()
+  },
+  destroyed() {
+    this.observer.disconnect()
+  },
+  isNearBottom() {
+    const closeToBottomThreshold = 200
+    return this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight <= closeToBottomThreshold
+  },
+  scrollToBottom() {
+    this.el.scrollTop = this.el.scrollHeight
+  }
+}
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, {
-  params: {_csrf_token: csrfToken}
+  params: {_csrf_token: csrfToken},
+  hooks: Hooks
 })
 
 // Show progress bar on live navigation and form submits

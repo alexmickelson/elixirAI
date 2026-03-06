@@ -96,7 +96,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         "type" => "function",
         "function" => %{"name" => tool_name, "arguments" => tool_args_start}
       } ->
-        Logger.info("Received tool call start for tool #{tool_name}")
+        # Logger.info("Received tool call start for tool #{tool_name}")
 
         send(
           server,
@@ -104,7 +104,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         )
 
       %{"index" => tool_index, "function" => %{"arguments" => tool_args_diff}} ->
-        Logger.info("Received tool call middle for index #{tool_index}")
+        # Logger.info("Received tool call middle for index #{tool_index}")
         send(server, {:ai_tool_call_middle, id, {tool_args_diff, tool_index}})
 
       other ->
@@ -117,7 +117,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         "choices" => [%{"finish_reason" => "tool_calls"}],
         "id" => id
       }) do
-    Logger.info("Received tool call end")
+    # Logger.info("Received tool call end")
     send(server, {:ai_tool_call_end, id})
   end
 
