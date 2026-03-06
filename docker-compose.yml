@@ -5,7 +5,54 @@ services:
       POSTGRES_USER: elixir_ai
       POSTGRES_PASSWORD: elixir_ai
       POSTGRES_DB: elixir_ai_dev
+    command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     ports:
       - 5432:5432
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elixir_ai -d elixir_ai_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  node1:
+    build: .
+    hostname: node1
+    env_file: .env
+    environment:
+      DATABASE_URL: ecto://elixir_ai:elixir_ai@db/elixir_ai_dev
+      PHX_HOST: localhost
+      PORT: 4000
+      RELEASE_NODE: elixir_ai@node1
+      RELEASE_COOKIE: secret_cluster_cookie
+      SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
+    depends_on:
+      db:
+        condition: service_healthy
+
+  node2:
+    build: .
+    hostname: node2
+    env_file: .env
+    environment:
+      DATABASE_URL: ecto://elixir_ai:elixir_ai@db/elixir_ai_dev
+      PHX_HOST: localhost
+      PORT: 4000
+      RELEASE_NODE: elixir_ai@node2
+      RELEASE_COOKIE: secret_cluster_cookie
+      SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
+    depends_on:
+      db:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - node1
+      - node2

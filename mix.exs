@@ -5,7 +5,7 @@ defmodule ElixirAi.MixProject do
     [
       app: :elixir_ai,
       version: "0.1.0",
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -53,10 +53,12 @@ defmodule ElixirAi.MixProject do
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
-      {:dns_cluster, "~> 0.1.1"},
+      {:dns_cluster, "~> 0.1.1", only: :dev},
+      {:libcluster, "~> 3.3"},
       {:bandit, "~> 1.5"},
       {:ecto_sql, "~> 3.11"},
-      {:postgrex, ">= 0.0.0"}
+      {:postgrex, ">= 0.0.0"},
+      {:horde, "~> 0.9"}
     ]
   end
 

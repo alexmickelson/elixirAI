@@ -29,17 +29,39 @@ if System.get_env("PHX_SERVER") do
 end
 
 if config_env() == :prod do
-  # The secret key base is used to sign/encrypt cookies and other secrets.
-  # A default value is used in config/dev.exs and config/test.exs but you
-  # want to use a different value for prod and you most likely don't want
-  # to check this value into version control, so we use an environment
-  # variable instead.
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||
       raise """
       environment variable SECRET_KEY_BASE is missing.
       You can generate one by calling: mix phx.gen.secret
       """
+
+  database_url =
+    System.get_env("DATABASE_URL") ||
+      raise """
+      environment variable DATABASE_URL is missing.
+      For example: ecto://user:password@host/database
+      """
+
+  config :elixir_ai, ElixirAi.Repo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+
+  # In Kubernetes, switch from Gossip to DNS-based discovery via a headless service.
+  # Set K8S_NAMESPACE and optionally K8S_SERVICE_NAME in your pod spec.
+  if System.get_env("K8S_NAMESPACE") do
+    config :libcluster,
+      topologies: [
+        k8s_dns: [
+          strategy: Cluster.Strategy.Kubernetes.DNS,
+          config: [
+            service: System.get_env("K8S_SERVICE_NAME") || "elixir-ai-headless",
+            application_name: "elixir_ai",
+            namespace: System.get_env("K8S_NAMESPACE")
+          ]
+        ]
+      ]
+  end
 
   host = System.get_env("PHX_HOST") || "example.com"
   port = String.to_integer(System.get_env("PORT") || "4000")

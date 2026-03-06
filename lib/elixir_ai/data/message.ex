@@ -6,7 +6,7 @@ defmodule ElixirAi.Message do
     Repo.all(
       from m in "messages",
         where: m.conversation_id == ^conversation_id,
-        order_by: m.position,
+        order_by: m.id,
         select: %{
           role: m.role,
           content: m.content,
@@ -18,17 +18,15 @@ defmodule ElixirAi.Message do
     |> Enum.map(&decode_message/1)
   end
 
-  def insert(conversation_id, message, position) do
+  def insert(conversation_id, message) do
     Repo.insert_all("messages", [
       [
-        id: Ecto.UUID.generate(),
         conversation_id: conversation_id,
         role: to_string(message.role),
         content: message[:content],
         reasoning_content: message[:reasoning_content],
         tool_calls: encode_tool_calls(message[:tool_calls]),
         tool_call_id: message[:tool_call_id],
-        position: position,
         inserted_at: DateTime.truncate(DateTime.utc_now(), :second)
       ]
     ])
@@ -40,7 +38,20 @@ defmodule ElixirAi.Message do
   defp decode_message(row) do
     row
     |> Map.update!(:role, &String.to_existing_atom/1)
+    |> Map.update(:tool_calls, nil, fn
+        nil -> nil
+        json when is_binary(json) ->
+          json |> Jason.decode!() |> Enum.map(&atomize_keys/1)
+        already_decoded -> Enum.map(already_decoded, &atomize_keys/1)
+      end)
     |> drop_nil_fields()
+  end
+
+  defp atomize_keys(map) when is_map(map) do
+    Map.new(map, fn
+      {k, v} when is_binary(k) -> {String.to_atom(k), v}
+      {k, v} -> {k, v}
+    end)
   end
 
   defp drop_nil_fields(map) do

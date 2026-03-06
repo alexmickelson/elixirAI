@@ -7,7 +7,7 @@ defmodule ElixirAi.Conversation do
   end
 
   def create(name) do
-    case Repo.insert_all("conversations", [[id: Ecto.UUID.generate(), name: name, inserted_at: now(), updated_at: now()]]) do
+    case Repo.insert_all("conversations", [[name: name, inserted_at: now(), updated_at: now()]]) do
       {1, _} -> :ok
       _ -> {:error, :db_error}
     end

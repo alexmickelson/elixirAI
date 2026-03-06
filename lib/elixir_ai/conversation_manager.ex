@@ -2,7 +2,19 @@ defmodule ElixirAi.ConversationManager do
   use GenServer
   alias ElixirAi.{Conversation, Message}
 
-  def start_link(_opts), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
+  @name {:via, Horde.Registry, {ElixirAi.ChatRegistry, __MODULE__}}
+
+  def start_link(_opts) do
+    GenServer.start_link(__MODULE__, nil, name: @name)
+  end
+
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      restart: :transient
+    }
+  end
 
   def init(_) do
     names = Conversation.all_names()
@@ -11,19 +23,19 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def create_conversation(name) do
-    GenServer.call(__MODULE__, {:create, name})
+    GenServer.call(@name, {:create, name})
   end
 
   def open_conversation(name) do
-    GenServer.call(__MODULE__, {:open, name})
+    GenServer.call(@name, {:open, name})
   end
 
   def list_conversations do
-    GenServer.call(__MODULE__, :list)
+    GenServer.call(@name, :list)
   end
 
   def get_messages(name) do
-    GenServer.call(__MODULE__, {:get_messages, name})
+    GenServer.call(@name, {:get_messages, name})
   end
 
   def handle_call({:create, name}, _from, conversations) do
@@ -64,10 +76,9 @@ defmodule ElixirAi.ConversationManager do
 
   def handle_info({:store_message, name, message}, conversations) do
     messages = Map.get(conversations, name, [])
-    position = length(messages)
 
     case Conversation.find_id(name) do
-      {:ok, conv_id} -> Message.insert(conv_id, message, position)
+      {:ok, conv_id} -> Message.insert(conv_id, message)
       _ -> :ok
     end
 
@@ -76,7 +87,7 @@ defmodule ElixirAi.ConversationManager do
 
   defp start_and_subscribe(name) do
     result =
-      case DynamicSupervisor.start_child(
+      case Horde.DynamicSupervisor.start_child(
              ElixirAi.ChatRunnerSupervisor,
              {ElixirAi.ChatRunner, name: name}
            ) do

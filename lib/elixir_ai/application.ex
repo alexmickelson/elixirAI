@@ -7,13 +7,27 @@ defmodule ElixirAi.Application do
     children = [
       ElixirAiWeb.Telemetry,
       ElixirAi.Repo,
-      {DNSCluster, query: Application.get_env(:elixir_ai, :dns_cluster_query) || :ignore},
+      {Cluster.Supervisor,
+       [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
       ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint,
-      {Registry, keys: :unique, name: ElixirAi.ChatRegistry},
-      {DynamicSupervisor, name: ElixirAi.ChatRunnerSupervisor, strategy: :one_for_one},
-      ElixirAi.ConversationManager
+      {Horde.Registry,
+       [
+         name: ElixirAi.ChatRegistry,
+         keys: :unique,
+         members: :auto,
+         delta_crdt_options: [sync_interval: 100]
+       ]},
+      {Horde.DynamicSupervisor,
+       [
+         name: ElixirAi.ChatRunnerSupervisor,
+         strategy: :one_for_one,
+         members: :auto,
+         delta_crdt_options: [sync_interval: 100],
+         process_redistribution: :active
+       ]},
+      ElixirAi.ClusterSingleton
     ]
 
     opts = [strategy: :one_for_one, name: ElixirAi.Supervisor]

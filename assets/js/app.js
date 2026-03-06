@@ -94,9 +94,16 @@ Hooks.ScrollBottom = {
 }
 
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
+
+// Retry very aggressively: 100ms, 250ms, 500ms, then cap at 1s indefinitely.
+const reconnectAfterMs = (tries) => [100, 250, 500][tries - 1] || 1000
+const rejoinAfterMs    = (tries) => [100, 250, 500][tries - 1] || 1000
+
 let liveSocket = new LiveSocket("/live", Socket, {
   params: {_csrf_token: csrfToken},
-  hooks: Hooks
+  hooks: Hooks,
+  reconnectAfterMs,
+  rejoinAfterMs
 })
 
 // Show progress bar on live navigation and form submits

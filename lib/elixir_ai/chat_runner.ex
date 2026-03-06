@@ -4,7 +4,7 @@ defmodule ElixirAi.ChatRunner do
   import ElixirAi.ChatUtils
   alias ElixirAi.{Conversation, Message}
 
-  defp via(name), do: {:via, Registry, {ElixirAi.ChatRegistry, name}}
+  defp via(name), do: {:via, Horde.Registry, {ElixirAi.ChatRegistry, name}}
   defp topic(name), do: "ai_chat:#{name}"
   defp message_topic(name), do: "conversation_messages:#{name}"
 
@@ -31,6 +31,13 @@ defmodule ElixirAi.ChatRunner do
         {:ok, conv_id} -> Message.load_for_conversation(conv_id)
         _ -> []
       end
+
+    last_message = List.last(messages)
+
+    if last_message && last_message.role == :user do
+      Logger.info("Last message role was #{last_message.role}, requesting AI response for conversation #{name}")
+      request_ai_response(self(), messages, tools(self(), name))
+    end
 
     {:ok,
      %{
@@ -280,6 +287,12 @@ defmodule ElixirAi.ChatRunner do
          streaming_response: new_streaming_response,
          messages: state.messages ++ [new_message]
      }}
+  end
+
+  def handle_info({:ai_request_error, reason}, state) do
+    Logger.error("AI request error: #{inspect(reason)}")
+    broadcast_ui(state.name, {:ai_request_error, reason})
+    {:noreply, %{state | streaming_response: nil, pending_tool_calls: []}}
   end
 
   def handle_call(:get_conversation, _from, state) do

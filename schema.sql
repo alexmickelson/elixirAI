@@ -6,13 +6,12 @@ CREATE TABLE conversations (
 );
 
 CREATE TABLE messages (
-  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  id                BIGSERIAL   PRIMARY KEY,
   conversation_id   UUID        NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   role              TEXT        NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),
   content           TEXT,
   reasoning_content TEXT,
   tool_calls        JSONB,
   tool_call_id      TEXT,
-  position          INTEGER     NOT NULL,
   inserted_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
