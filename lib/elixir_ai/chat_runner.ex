@@ -43,6 +43,13 @@ defmodule ElixirAi.ChatRunner do
         description: "read a key value pair that was previously stored with store_thing",
         function: &ElixirAi.ToolTesting.get_thing/1,
         parameters: ElixirAi.ToolTesting.get_thing_params()
+      ),
+      ai_tool(
+        name: "set_background_color",
+        description:
+          "set the background color of the chat interface, accepts specified tailwind colors",
+        function: &ElixirAi.ToolTesting.set_background_color/1,
+        parameters: ElixirAi.ToolTesting.set_background_color_params()
       )
     ]
   end

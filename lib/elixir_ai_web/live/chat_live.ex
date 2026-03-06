@@ -15,7 +15,8 @@ defmodule ElixirAiWeb.ChatLive do
      socket
      |> assign(user_input: "")
      |> assign(messages: conversation.messages)
-     |> assign(streaming_response: nil)}
+     |> assign(streaming_response: nil)
+     |> assign(background_color: "bg-cyan-950/30")}
   end
 
   def render(assigns) do
@@ -24,7 +25,11 @@ defmodule ElixirAiWeb.ChatLive do
       <div class="px-4 py-3 font-semibold ">
         Live Chat
       </div>
-      <div id="chat-messages" phx-hook="ScrollBottom" class="flex-1 overflow-y-auto p-4 bg-cyan-950/30 rounded-lg">
+      <div
+        id="chat-messages"
+        phx-hook="ScrollBottom"
+        class={"flex-1 overflow-y-auto p-4 rounded-lg #{@background_color}"}
+      >
         <%= if @messages == [] do %>
           <p class="text-sm text-center mt-4">No messages yet.</p>
         <% end %>
@@ -108,6 +113,7 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_info({:tool_calls_finished, tool_messages}, socket) do
     Logger.info("Received tool_calls_finished with #{inspect(tool_messages)}")
+
     {:noreply,
      socket
      |> update(:messages, &(&1 ++ tool_messages))
@@ -131,5 +137,9 @@ defmodule ElixirAiWeb.ChatLive do
      socket
      |> update(:messages, &(&1 ++ [final_response]))
      |> assign(streaming_response: nil)}
+  end
+
+  def handle_info({:set_background_color, color}, socket) do
+    {:noreply, assign(socket, background_color: color)}
   end
 end

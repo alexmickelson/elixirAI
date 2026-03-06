@@ -28,21 +28,41 @@ defmodule ElixirAi.ToolTesting do
     }
   end
 
-  def store_thing_definition(name) do
+  def store_thing_params do
     %{
-      "type" => "function",
-      "function" => %{
-        "name" => name,
-        "description" => "store key value pair",
-        "parameters" => %{
-          "type" => "object",
-          "properties" => %{
-            "name" => %{"type" => "string"},
-            "value" => %{"type" => "string"}
-          },
-          "required" => ["name", "value"]
+      "type" => "object",
+      "properties" => %{
+        "name" => %{"type" => "string"},
+        "value" => %{"type" => "string"}
+      },
+      "required" => ["name", "value"]
+    }
+  end
+
+  def set_background_color(%{"color" => color}) do
+    Phoenix.PubSub.broadcast(ElixirAi.PubSub, "ai_chat", {:set_background_color, color})
+  end
+
+  def set_background_color_params do
+    valid_tailwind_colors = [
+      "bg-cyan-950/30",
+      "bg-red-950/30",
+      "bg-green-950/30",
+      "bg-blue-950/30",
+      "bg-yellow-950/30",
+      "bg-purple-950/30",
+      "bg-pink-950/30"
+    ]
+
+    %{
+      "type" => "object",
+      "properties" => %{
+        "color" => %{
+          "type" => "string",
+          "enum" => valid_tailwind_colors
         }
-      }
+      },
+      "required" => ["color"]
     }
   end
 
