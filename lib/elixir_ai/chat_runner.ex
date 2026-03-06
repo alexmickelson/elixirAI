@@ -2,9 +2,11 @@ defmodule ElixirAi.ChatRunner do
   require Logger
   use GenServer
   import ElixirAi.ChatUtils
+  alias ElixirAi.{Conversation, Message}
 
   defp via(name), do: {:via, Registry, {ElixirAi.ChatRegistry, name}}
   defp topic(name), do: "ai_chat:#{name}"
+  defp message_topic(name), do: "conversation_messages:#{name}"
 
   def new_user_message(name, text_content) do
     GenServer.cast(via(name), {:user_message, text_content})
@@ -24,13 +26,20 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def init(name) do
-    {:ok, %{
-      name: name,
-      messages: [],
-      streaming_response: nil,
-      pending_tool_calls: [],
-      tools: tools(self(), name)
-    }}
+    messages =
+      case Conversation.find_id(name) do
+        {:ok, conv_id} -> Message.load_for_conversation(conv_id)
+        _ -> []
+      end
+
+    {:ok,
+     %{
+       name: name,
+       messages: messages,
+       streaming_response: nil,
+       pending_tool_calls: [],
+       tools: tools(self(), name)
+     }}
   end
 
   def tools(server, name) do
@@ -54,7 +63,11 @@ defmodule ElixirAi.ChatRunner do
         description:
           "set the background color of the chat interface, accepts specified tailwind colors",
         function: fn %{"color" => color} ->
-          Phoenix.PubSub.broadcast(ElixirAi.PubSub, "ai_chat:#{name}", {:set_background_color, color})
+          Phoenix.PubSub.broadcast(
+            ElixirAi.PubSub,
+            "ai_chat:#{name}",
+            {:set_background_color, color}
+          )
         end,
         parameters: %{
           "type" => "object",
@@ -73,7 +86,8 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_cast({:user_message, text_content}, state) do
     new_message = %{role: :user, content: text_content}
-    broadcast(state.name, {:user_chat_message, new_message})
+    broadcast_ui(state.name, {:user_chat_message, new_message})
+    store_message(state.name, new_message)
     new_state = %{state | messages: state.messages ++ [new_message]}
 
     request_ai_response(self(), new_state.messages, state.tools)
@@ -82,7 +96,7 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_info({:start_new_ai_response, id}, state) do
     starting_response = %{id: id, reasoning_content: "", content: "", tool_calls: []}
-    broadcast(state.name, {:start_ai_response_stream, starting_response})
+    broadcast_ui(state.name, {:start_ai_response_stream, starting_response})
 
     {:noreply, %{state | streaming_response: starting_response}}
   end
@@ -100,7 +114,7 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def handle_info({:ai_reasoning_chunk, _id, reasoning_content}, state) do
-    broadcast(state.name, {:reasoning_chunk_content, reasoning_content})
+    broadcast_ui(state.name, {:reasoning_chunk_content, reasoning_content})
 
     {:noreply,
      %{
@@ -113,7 +127,7 @@ defmodule ElixirAi.ChatRunner do
   end
 
   def handle_info({:ai_text_chunk, _id, text_content}, state) do
-    broadcast(state.name, {:text_chunk_content, text_content})
+    broadcast_ui(state.name, {:text_chunk_content, text_content})
 
     {:noreply,
      %{
@@ -137,7 +151,8 @@ defmodule ElixirAi.ChatRunner do
       tool_calls: state.streaming_response.tool_calls
     }
 
-    broadcast(state.name, {:end_ai_response, final_message})
+    broadcast_ui(state.name, {:end_ai_response, final_message})
+    store_message(state.name, final_message)
 
     {:noreply,
      %{
@@ -202,13 +217,14 @@ defmodule ElixirAi.ChatRunner do
       tool_calls: state.streaming_response.tool_calls
     }
 
-    broadcast(state.name, {:tool_request_message, tool_request_message})
-
+    broadcast_ui(state.name, {:tool_request_message, tool_request_message})
 
     {failed_call_messages, pending_call_ids} =
-      Enum.reduce(state.streaming_response.tool_calls, {[], []}, fn tool_call, {failed, pending} ->
+      Enum.reduce(state.streaming_response.tool_calls, {[], []}, fn tool_call,
+                                                                    {failed, pending} ->
         with {:ok, decoded_args} <- Jason.decode(tool_call.arguments),
-             tool when not is_nil(tool) <- Enum.find(state.tools, fn t -> t.name == tool_call.name end) do
+             tool when not is_nil(tool) <-
+               Enum.find(state.tools, fn t -> t.name == tool_call.name end) do
           tool.run_function.(id, tool_call.id, decoded_args)
           {failed, [tool_call.id | pending]}
         else
@@ -224,6 +240,8 @@ defmodule ElixirAi.ChatRunner do
         end
       end)
 
+    store_message(state.name, [tool_request_message] ++ failed_call_messages)
+
     {:noreply,
      %{
        state
@@ -235,7 +253,8 @@ defmodule ElixirAi.ChatRunner do
   def handle_info({:tool_response, _id, tool_call_id, result}, state) do
     new_message = %{role: :tool, content: inspect(result), tool_call_id: tool_call_id}
 
-    broadcast(state.name, {:one_tool_finished, new_message})
+    broadcast_ui(state.name, {:one_tool_finished, new_message})
+    store_message(state.name, new_message)
 
     new_pending_tool_calls =
       Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
@@ -250,7 +269,7 @@ defmodule ElixirAi.ChatRunner do
       end
 
     if new_pending_tool_calls == [] do
-      broadcast(state.name, :tool_calls_finished)
+      broadcast_ui(state.name, :tool_calls_finished)
       request_ai_response(self(), state.messages ++ [new_message], state.tools)
     end
 
@@ -271,5 +290,20 @@ defmodule ElixirAi.ChatRunner do
     {:reply, state.streaming_response, state}
   end
 
-  defp broadcast(name, msg), do: Phoenix.PubSub.broadcast(ElixirAi.PubSub, topic(name), msg)
+  defp broadcast_ui(name, msg), do: Phoenix.PubSub.broadcast(ElixirAi.PubSub, topic(name), msg)
+
+  defp store_message(name, messages) when is_list(messages) do
+    Enum.each(messages, &store_message(name, &1))
+    messages
+  end
+
+  defp store_message(name, message) do
+    Phoenix.PubSub.broadcast(
+      ElixirAi.PubSub,
+      message_topic(name),
+      {:store_message, name, message}
+    )
+
+    message
+  end
 end

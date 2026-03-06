@@ -72,7 +72,7 @@ Hooks.MarkdownStream = {
 
 Hooks.ScrollBottom = {
   mounted() {
-    this.scrollToBottom()
+    requestAnimationFrame(() => this.scrollToBottom())
     this.observer = new MutationObserver(() => {
       if (this.isNearBottom()) this.scrollToBottom()
     })

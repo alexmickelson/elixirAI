@@ -6,6 +6,7 @@ defmodule ElixirAi.Application do
   def start(_type, _args) do
     children = [
       ElixirAiWeb.Telemetry,
+      ElixirAi.Repo,
       {DNSCluster, query: Application.get_env(:elixir_ai, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
       ElixirAi.ToolTesting,
