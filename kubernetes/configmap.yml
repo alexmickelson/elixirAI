@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-ha-elixir-config
+  namespace: ai-ha-elixir
+data:
+  PHX_SERVER: "true"
+  PORT: "4000"
+  POOL_SIZE: "5"
+  K8S_NAMESPACE: ai-ha-elixir
+  K8S_SERVICE_NAME: ai-ha-elixir-headless
+  RELEASE_COOKIE: elixir_ai_cluster_cookie
+  PHX_HOST: ai-ha.alexmickelson.guru
+  DATABASE_URL: ecto://elixir_ai:elixir_ai@postgres-service.postgres/elixir_ai
+  AI_RESPONSES_ENDPOINT: http://ai-snow.reindeer-pinecone.ts.net:9292/v1/chat/completions
+  AI_MODEL: gpt-oss-120b

@@ -55,7 +55,7 @@ if config_env() == :prod do
         k8s_dns: [
           strategy: Cluster.Strategy.Kubernetes.DNS,
           config: [
-            service: System.get_env("K8S_SERVICE_NAME") || "elixir-ai-headless",
+            service: System.get_env("K8S_SERVICE_NAME") || "ai-ha-elixir-headless",
             application_name: "elixir_ai",
             namespace: System.get_env("K8S_NAMESPACE")
           ]

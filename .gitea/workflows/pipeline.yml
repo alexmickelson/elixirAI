@@ -1,0 +1,47 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: home-server
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend image
+        run: |
+          docker build -t alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER .
+          docker push -q alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER
+
+      - name: Deploy to Kubernetes
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBE_CONFIG_FILE }}
+          AI_TOKEN: ${{ secrets.AI_TOKEN }}
+        run: |
+          echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
+          export KUBECONFIG=/tmp/elixir-kubeconfig.yml
+
+          kubectl create namespace ai-ha-elixir --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl get secret ai-ha-elixir-secrets --namespace ai-ha-elixir || \
+            kubectl create secret generic ai-ha-elixir-secrets \
+              --namespace ai-ha-elixir \
+              --from-literal=SECRET_KEY_BASE=$(openssl rand -hex 64) \
+              --from-literal=AI_TOKEN="$AI_TOKEN"
+
+          for file in kubernetes/*.yml; do
+            cat "$file" | envsubst | kubectl apply -f -
+          done

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ai-ha-elixir
+  namespace: ai-ha-elixir
+spec:
+  serviceName: ai-ha-elixir-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-ha-elixir
+  template:
+    metadata:
+      labels:
+        app: ai-ha-elixir
+    spec:
+      containers:
+        - name: ai-ha-elixir
+          image: alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER
+          ports:
+            - containerPort: 4000
+              name: http
+            - containerPort: 4369
+              name: epmd
+            - containerPort: 9000
+              name: beam
+          envFrom:
+            - configMapRef:
+                name: ai-ha-elixir-config
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: RELEASE_NODE
+              value: "elixir_ai@$(POD_IP)"
+            - name: SECRET_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: ai-ha-elixir-secrets
+                  key: SECRET_KEY_BASE
+            - name: AI_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ai-ha-elixir-secrets
+                  key: AI_TOKEN
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
