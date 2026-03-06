@@ -10,6 +10,12 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
     </script>
+    <script type="module">
+      import * as smd from "https://cdn.jsdelivr.net/npm/streaming-markdown/smd.min.js"
+      import DOMPurify from "https://cdn.jsdelivr.net/npm/dompurify/+esm"
+      window.smd = smd
+      window.DOMPurify = DOMPurify
+    </script>
   </head>
   <body class="bg-cyan-900 text-cyan-50">
     {@inner_content}

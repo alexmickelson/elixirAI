@@ -1,6 +1,5 @@
 defmodule ElixirAiWeb.ChatMessage do
   use Phoenix.Component
-  alias ElixirAiWeb.Markdown
   alias Phoenix.LiveView.JS
 
   attr :content, :string, required: true
@@ -60,20 +59,62 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :reasoning_content, :string, default: nil
   attr :tool_calls, :list, default: []
 
+  # Renders the in-progress streaming message. Content and reasoning are rendered
+  # entirely client-side via the MarkdownStream hook — the server sends push_event
+  # chunks instead of re-rendering the full markdown on every token.
   def streaming_assistant_message(assigns) do
-    assigns =
-      assigns
-      |> assign(:_reasoning_id, "reasoning-stream")
-      |> assign(:_expanded, true)
-
     ~H"""
-    <.message_bubble
-      reasoning_id={@_reasoning_id}
-      content={@content}
-      reasoning_content={@reasoning_content}
-      tool_calls={@tool_calls}
-      expanded={@_expanded}
-    />
+    <div class="mb-2 text-sm text-left">
+      <!-- Reasoning section — only shown once reasoning_content is non-empty.
+           The div is always in the DOM so the hook mounts before chunks arrive. -->
+      <div id="stream-reasoning-wrap">
+        <%= if @reasoning_content && @reasoning_content != "" do %>
+          <button
+            type="button"
+            class="flex items-center text-cyan-500/60 hover:text-cyan-300 transition-colors duration-150 cursor-pointer"
+            phx-click={
+              JS.toggle_class("collapsed", to: "#reasoning-stream")
+              |> JS.toggle_class("rotate-180", to: "#reasoning-stream-chevron")
+            }
+            aria-label="Toggle reasoning"
+          >
+            <div class="flex items-center gap-1 text-cyan-100/40 ps-2 mb-1">
+              <span class="text-xs">reasoning</span>
+              <svg
+                id="reasoning-stream-chevron"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-3 h-3 transition-transform duration-300"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            </div>
+          </button>
+        <% end %>
+        <div
+          id="reasoning-stream"
+          phx-hook="MarkdownStream"
+          phx-update="ignore"
+          data-event="reasoning_chunk"
+          class="reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs max-w-prose mb-1 markdown"
+        ></div>
+      </div>
+      <%= for tool_call <- @tool_calls do %>
+        <.tool_call_item tool_call={tool_call} />
+      <% end %>
+      <div
+        id="stream-content"
+        phx-hook="MarkdownStream"
+        phx-update="ignore"
+        data-event="md_chunk"
+        class="inline-block px-3 py-2 rounded-lg max-w-prose markdown bg-cyan-950/50"
+      ></div>
+    </div>
     """
   end
 
@@ -115,21 +156,26 @@ defmodule ElixirAiWeb.ChatMessage do
         </button>
         <div
           id={@reasoning_id}
+          phx-hook="MarkdownRender"
+          phx-update="ignore"
+          data-md={@reasoning_content}
           class={[
             "reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs max-w-prose mb-1 markdown",
             !@expanded && "collapsed"
           ]}
-        >
-          {Markdown.render(@reasoning_content)}
-        </div>
+        ></div>
       <% end %>
       <%= for tool_call <- @tool_calls do %>
         <.tool_call_item tool_call={tool_call} />
       <% end %>
       <%= if @content && @content != "" do %>
-        <div class="inline-block px-3 py-2 rounded-lg max-w-prose markdown bg-cyan-950/50">
-          {Markdown.render(@content)}
-        </div>
+        <div
+          id={"#{@reasoning_id}-content"}
+          phx-hook="MarkdownRender"
+          phx-update="ignore"
+          data-md={@content}
+          class="inline-block px-3 py-2 rounded-lg max-w-prose markdown bg-cyan-950/50"
+        ></div>
       <% end %>
     </div>
     """

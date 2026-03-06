@@ -24,6 +24,52 @@ import topbar from "../vendor/topbar"
 
 let Hooks = {}
 
+// Renders a complete markdown string client-side on mount.
+// The raw markdown is passed as the data-md attribute.
+Hooks.MarkdownRender = {
+  mounted() {
+    const smd = window.smd
+    const content = this.el.dataset.md
+    if (!content) return
+    const parser = smd.parser(smd.default_renderer(this.el))
+    smd.parser_write(parser, content)
+    smd.parser_end(parser)
+  }
+}
+
+// Streams markdown chunks into the element using the streaming-markdown parser.
+// The server sends push_event(socket, eventName, %{chunk: "..."}) for each chunk.
+// data-event on the element controls which event this hook listens for.
+// The server sends push_event(socket, eventName, %{chunk: "..."}) for each chunk.
+// data-event on the element controls which event this hook listens for.
+Hooks.MarkdownStream = {
+  mounted() {
+    const smd = window.smd
+    const DOMPurify = window.DOMPurify
+    this._chunks = ""
+    this._parser = smd.parser(smd.default_renderer(this.el))
+    const eventName = this.el.dataset.event
+    this.handleEvent(eventName, ({chunk}) => {
+      this._chunks += chunk
+      // Sanitize all accumulated chunks to detect injection attacks.
+      DOMPurify.sanitize(this._chunks)
+      if (DOMPurify.removed.length > 0) {
+        // Insecure content detected — stop rendering immediately.
+        smd.parser_end(this._parser)
+        this._parser = null
+        return
+      }
+      if (this._parser) smd.parser_write(this._parser, chunk)
+    })
+  },
+  destroyed() {
+    if (this._parser) {
+      window.smd.parser_end(this._parser)
+      this._parser = null
+    }
+  }
+}
+
 Hooks.ScrollBottom = {
   mounted() {
     this.scrollToBottom()

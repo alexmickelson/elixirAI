@@ -49,7 +49,6 @@ defmodule ElixirAi.MixProject do
        depth: 1},
       {:req, "~> 0.5"},
       {:html_sanitize_ex, "~> 1.4"},
-      {:earmark, "~> 1.4"},
       {:dotenvy, "~> 1.1.1"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},

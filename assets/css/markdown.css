@@ -92,7 +92,7 @@
 }
 
 .markdown table {
-  @apply w-full border-collapse my-4 text-sm;
+  @apply block w-full border-collapse my-4 text-sm overflow-x-auto;
 }
 .markdown thead {
   @apply bg-cyan-950;

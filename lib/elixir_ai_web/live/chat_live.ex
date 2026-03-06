@@ -131,7 +131,11 @@ defmodule ElixirAiWeb.ChatLive do
           socket.assigns.streaming_response.reasoning_content <> reasoning_content
     }
 
-    {:noreply, assign(socket, streaming_response: updated_response)}
+    # Update assign (controls toggle button visibility) and stream chunk to hook.
+    {:noreply,
+     socket
+     |> assign(streaming_response: updated_response)
+     |> push_event("reasoning_chunk", %{chunk: reasoning_content})}
   end
 
   def handle_info(
@@ -148,7 +152,11 @@ defmodule ElixirAiWeb.ChatLive do
       | content: socket.assigns.streaming_response.content <> text_content
     }
 
-    {:noreply, assign(socket, streaming_response: updated_response)}
+    # Update assign (accumulated for final message) and stream chunk to hook.
+    {:noreply,
+     socket
+     |> assign(streaming_response: updated_response)
+     |> push_event("md_chunk", %{chunk: text_content})}
   end
 
   def handle_info(:tool_calls_finished, socket) do
