@@ -76,72 +76,49 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
     )
   end
 
-  # start tool call
+  # start and middle tool call
   def handle_stream_line(server, %{
         "choices" => [
           %{
             "delta" => %{
-              "tool_calls" => [
-                %{
-                  "function" => %{
-                    "name" => tool_name,
-                    "arguments" => tool_args_start
-                  }
-                }
-              ]
+              "tool_calls" => tool_calls
             },
-            "finish_reason" => nil,
-            "index" => tool_index
+            "finish_reason" => nil
           }
         ],
         "id" => id
-      }) do
-    send(
-      server,
-      {:ai_tool_call_start, id, {tool_name, tool_args_start, tool_index}}
-    )
-  end
+      })
+      when is_list(tool_calls) do
+    Enum.each(tool_calls, fn
+      %{
+        "id" => tool_call_id,
+        "index" => tool_index,
+        "type" => "function",
+        "function" => %{"name" => tool_name, "arguments" => tool_args_start}
+      } ->
+        Logger.info("Received tool call start for tool #{tool_name}")
 
-  # middle tool call
-  def handle_stream_line(server, %{
-        "choices" => [
-          %{
-            "delta" => %{
-              "tool_calls" => [
-                %{
-                  "function" => %{
-                    "arguments" => tool_args_diff
-                  }
-                }
-              ]
-            },
-            "finish_reason" => nil,
-            "index" => tool_index
-          }
-        ],
-        "id" => id
-      }) do
-    send(
-      server,
-      {:ai_tool_call_middle, id, {tool_args_diff, tool_index}}
-    )
+        send(
+          server,
+          {:ai_tool_call_start, id, {tool_name, tool_args_start, tool_index, tool_call_id}}
+        )
+
+      %{"index" => tool_index, "function" => %{"arguments" => tool_args_diff}} ->
+        Logger.info("Received tool call middle for index #{tool_index}")
+        send(server, {:ai_tool_call_middle, id, {tool_args_diff, tool_index}})
+
+      other ->
+        Logger.warning("Unmatched tool call item: #{inspect(other)}")
+    end)
   end
 
   # end tool call
   def handle_stream_line(server, %{
-        "choices" => [
-          %{
-            "delta" => %{},
-            "finish_reason" => "tool_calls",
-            "index" => tool_index
-          }
-        ],
+        "choices" => [%{"finish_reason" => "tool_calls"}],
         "id" => id
       }) do
-    send(
-      server,
-      {:ai_tool_call_end, id, tool_index}
-    )
+    Logger.info("Received tool call end")
+    send(server, {:ai_tool_call_end, id})
   end
 
   def handle_stream_line(_server, %{"error" => error_info}) do

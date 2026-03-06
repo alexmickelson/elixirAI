@@ -9,6 +9,7 @@ defmodule ElixirAi.Application do
       {DNSCluster, query: Application.get_env(:elixir_ai, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
       ElixirAi.ChatRunner,
+      ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint
     ]
 

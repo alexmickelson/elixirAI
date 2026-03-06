@@ -1,5 +1,6 @@
 defmodule ElixirAiWeb.ChatLive do
   use ElixirAiWeb, :live_view
+  require Logger
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
   alias ElixirAi.ChatRunner
@@ -28,14 +29,17 @@ defmodule ElixirAiWeb.ChatLive do
           <p class="text-sm text-center mt-4">No messages yet.</p>
         <% end %>
         <%= for msg <- @messages do %>
-          <%= if msg.role == :user do %>
-            <.user_message content={msg.content} />
-          <% else %>
-            <.assistant_message
-              content={msg.content}
-              reasoning_content={msg.reasoning_content}
-              tool_calls={Map.get(msg, :tool_calls, [])}
-            />
+          <%= cond do %>
+            <% msg.role == :user -> %>
+              <.user_message content={msg.content} />
+            <% msg.role == :tool -> %>
+              <.tool_result_message content={msg.content} tool_call_id={msg.tool_call_id} />
+            <% true -> %>
+              <.assistant_message
+                content={msg.content}
+                reasoning_content={msg.reasoning_content}
+                tool_calls={Map.get(msg, :tool_calls, [])}
+              />
           <% end %>
         <% end %>
         <%= if @streaming_response do %>
@@ -102,18 +106,25 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, streaming_response: updated_response)}
   end
 
-  def handle_info({:tool_calls_finished, final_message}, socket) do
+  def handle_info({:tool_calls_finished, tool_messages}, socket) do
+    Logger.info("Received tool_calls_finished with #{inspect(tool_messages)}")
     {:noreply,
      socket
-     |> update(:messages, &(&1 ++ [final_message]))
+     |> update(:messages, &(&1 ++ tool_messages))
      |> assign(streaming_response: nil)}
+  end
+
+  # tool_calls_finished already cleared streaming_response and committed messages — ignore
+  def handle_info(:end_ai_response, %{assigns: %{streaming_response: nil}} = socket) do
+    {:noreply, socket}
   end
 
   def handle_info(:end_ai_response, socket) do
     final_response = %{
       role: :assistant,
       content: socket.assigns.streaming_response.content,
-      reasoning_content: socket.assigns.streaming_response.reasoning_content
+      reasoning_content: socket.assigns.streaming_response.reasoning_content,
+      tool_calls: socket.assigns.streaming_response.tool_calls
     }
 
     {:noreply,

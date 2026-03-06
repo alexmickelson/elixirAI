@@ -9,6 +9,10 @@ defmodule ElixirAi.ToolTesting do
     GenServer.call(__MODULE__, :get_thing)
   end
 
+  def get_thing(_) do
+    GenServer.call(__MODULE__, :get_thing)
+  end
+
   def store_thing_definition(name) do
     %{
       "type" => "function",

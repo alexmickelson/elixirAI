@@ -19,6 +19,7 @@ defmodule ElixirAi.ChatUtils do
 
       headers = [{"authorization", "Bearer #{api_key}"}]
 
+      Logger.info("sending AI request with body: #{inspect(body)}")
       case Req.post(api_url,
              json: body,
              headers: headers,
@@ -37,6 +38,28 @@ defmodule ElixirAi.ChatUtils do
           IO.warn("AI request failed: #{inspect(reason)}")
       end
     end)
+  end
+
+  def api_message(%{role: :assistant, tool_calls: [_ | _] = tool_calls} = msg) do
+    %{
+      role: "assistant",
+      content: Map.get(msg, :content, ""),
+      tool_calls:
+        Enum.map(tool_calls, fn call ->
+          %{
+            id: call.id,
+            type: "function",
+            function: %{
+              name: call.name,
+              arguments: call.arguments
+            }
+          }
+        end)
+    }
+  end
+
+  def api_message(%{role: :tool, tool_call_id: tool_call_id, content: content}) do
+    %{role: "tool", tool_call_id: tool_call_id, content: content}
   end
 
   def api_message(%{role: role, content: content}) do
