@@ -34,6 +34,8 @@ spec:
                   fieldPath: status.podIP
             - name: RELEASE_NODE
               value: "elixir_ai@$(POD_IP)"
+            - name: RELEASE_DISTRIBUTION
+              value: "name"
             - name: SECRET_KEY_BASE
               valueFrom:
                 secretKeyRef:
