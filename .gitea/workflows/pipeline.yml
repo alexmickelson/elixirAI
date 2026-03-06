@@ -28,7 +28,7 @@ jobs:
 
       - name: Deploy to Kubernetes
         env:
-          KUBECONFIG_CONTENT: ${{ secrets.KUBE_CONFIG_FILE }}
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
           AI_TOKEN: ${{ secrets.AI_TOKEN }}
         run: |
           echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
