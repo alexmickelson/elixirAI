@@ -23,7 +23,7 @@ jobs:
 
       - name: Build and push backend image
         run: |
-          docker build -t alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER .
+          docker build -q -t alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER .
           docker push -q alexmickelson/ai-liveview:$GITHUB_RUN_NUMBER
 
       - name: Deploy to Kubernetes

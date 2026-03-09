@@ -20,7 +20,8 @@ config :elixir_ai, ElixirAiWeb.Endpoint,
     layout: false
   ],
   pubsub_server: ElixirAi.PubSub,
-  live_view: [signing_salt: "4UG1IVt+"]
+  live_view: [signing_salt: "4UG1IVt+"],
+  log: false
 
 # Configure esbuild (the version is required)
 config :esbuild,
@@ -46,12 +47,7 @@ config :tailwind,
 # Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
-  metadata: [:request_id],
-  filters: [:health_check_filter]
-
-config :logger, :health_check_filter,
-  module: ElixirAiWeb.HealthCheckFilter,
-  function: :filter
+  metadata: [:request_id]
 
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
@@ -59,7 +55,9 @@ config :phoenix, :json_library, Jason
 # Lower the BEAM node-down detection window from the default 60s.
 # Nodes send ticks every (net_ticktime / 4)s; a node is declared down
 # after 4 missed ticks (net_ticktime total). 5s means detection in ≤5s.
-config :kernel, net_ticktime: 2
+if System.get_env("RELEASE_MODE") do
+  config :kernel, net_ticktime: 2
+end
 
 # Libcluster — Gossip strategy works for local dev and Docker Compose
 # (UDP multicast, zero config). Overridden to Kubernetes.DNS in runtime.exs for prod.
