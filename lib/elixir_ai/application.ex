@@ -4,14 +4,6 @@ defmodule ElixirAi.Application do
 
   @impl true
   def start(_type, _args) do
-    # Attach telemetry handler to filter health check logs
-    :telemetry.attach(
-      "filter-health-logs",
-      [:phoenix, :endpoint, :stop],
-      &filter_health_logs/4,
-      nil
-    )
-
     children = [
       ElixirAiWeb.Telemetry,
       ElixirAi.Repo,
@@ -46,15 +38,5 @@ defmodule ElixirAi.Application do
   def config_change(changed, _new, removed) do
     ElixirAiWeb.Endpoint.config_change(changed, removed)
     :ok
-  end
-
-  # Filter health check requests from telemetry logs
-  defp filter_health_logs(_event, _measurements, %{conn: %{request_path: "/health"}}, _config) do
-    :ok
-  end
-
-  defp filter_health_logs(event, measurements, metadata, config) do
-    # Forward to default Phoenix logger
-    :telemetry.execute(event, measurements, metadata)
   end
 end
