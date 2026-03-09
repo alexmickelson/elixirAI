@@ -47,6 +47,18 @@ defmodule ElixirAi.ChatUtils do
       api_key = Application.fetch_env!(:elixir_ai, :ai_token)
       model = Application.fetch_env!(:elixir_ai, :ai_model)
 
+      if is_nil(api_url) or api_url == "" do
+        Logger.warning("AI endpoint is empty or nil")
+      end
+
+      if is_nil(api_key) or api_key == "" do
+        Logger.warning("AI token is empty or nil")
+      end
+
+      if is_nil(model) or model == "" do
+        Logger.warning("AI model is empty or nil")
+      end
+
       body = %{
         model: model,
         stream: true,
