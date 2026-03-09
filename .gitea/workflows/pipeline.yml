@@ -42,6 +42,11 @@ jobs:
               --from-literal=SECRET_KEY_BASE=$(openssl rand -hex 64) \
               --from-literal=AI_TOKEN="$AI_TOKEN"
 
+          kubectl create configmap db-schema \
+            --from-file=schema.sql=schema.sql \
+            --namespace ai-ha-elixir \
+            --dry-run=client -o yaml | kubectl apply -f -
+
           for file in kubernetes/*.yml; do
             cat "$file" | envsubst | kubectl apply -f -
           done

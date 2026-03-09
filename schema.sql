@@ -1,11 +1,11 @@
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT        NOT NULL UNIQUE,
   inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id                BIGSERIAL   PRIMARY KEY,
   conversation_id   UUID        NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   role              TEXT        NOT NULL CHECK (role IN ('user', 'assistant', 'tool')),

@@ -25,6 +25,10 @@ spec:
               value: "elixir_ai"
             - name: POSTGRES_DB
               value: "elixir_ai"
+          volumeMounts:
+            - name: schema
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "elixir_ai"]
@@ -37,6 +41,10 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      volumes:
+        - name: schema
+          configMap:
+            name: db-schema
 
 ---
 apiVersion: v1
