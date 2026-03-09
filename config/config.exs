@@ -20,8 +20,7 @@ config :elixir_ai, ElixirAiWeb.Endpoint,
     layout: false
   ],
   pubsub_server: ElixirAi.PubSub,
-  live_view: [signing_salt: "4UG1IVt+"],
-  log: false
+  live_view: [signing_salt: "4UG1IVt+"]
 
 # Configure esbuild (the version is required)
 config :esbuild,
