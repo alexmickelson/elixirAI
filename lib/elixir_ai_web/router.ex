@@ -14,12 +14,6 @@ defmodule ElixirAiWeb.Router do
     plug :accepts, ["json"]
   end
 
-  scope "/", ElixirAiWeb, log: false do
-    pipe_through :api
-
-    get "/health", HealthController, :index
-  end
-
   scope "/", ElixirAiWeb do
     pipe_through :browser
 
