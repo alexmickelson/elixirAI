@@ -38,6 +38,9 @@ defmodule ElixirAiWeb.Endpoint do
     cookie_key: "request_logger"
 
   plug Plug.RequestId
+
+  plug Plug.Logger, log: :info, filter: &ElixirAiWeb.Endpoint.filter_health_check/1
+
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   plug Plug.Parsers,
@@ -49,4 +52,8 @@ defmodule ElixirAiWeb.Endpoint do
   plug Plug.Head
   plug Plug.Session, @session_options
   plug ElixirAiWeb.Router
+
+  # Filter health check requests from logs
+  def filter_health_check(%{request_path: "/health"}), do: false
+  def filter_health_check(_), do: :info
 end

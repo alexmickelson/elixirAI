@@ -48,14 +48,14 @@ spec:
                   key: AI_TOKEN
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 4000
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 4000
             initialDelaySeconds: 20
             periodSeconds: 10
@@ -67,4 +67,3 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
-

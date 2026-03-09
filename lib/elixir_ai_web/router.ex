@@ -15,6 +15,12 @@ defmodule ElixirAiWeb.Router do
   end
 
   scope "/", ElixirAiWeb do
+    pipe_through :api
+
+    get "/health", HealthController, :index
+  end
+
+  scope "/", ElixirAiWeb do
     pipe_through :browser
 
     live "/", HomeLive
