@@ -6,6 +6,7 @@ metadata:
 spec:
   serviceName: ai-ha-elixir-headless
   replicas: 3
+  podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:

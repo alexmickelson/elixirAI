@@ -83,7 +83,7 @@ defmodule ElixirAi.ChatUtils do
           :ok
 
         {:error, reason} ->
-          IO.warn("AI request failed: #{inspect(reason)}")
+          IO.warn("AI request failed: #{inspect(reason)} for #{api_url}")
       end
     end)
   end
