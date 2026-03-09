@@ -6,6 +6,10 @@ metadata:
 spec:
   serviceName: ai-ha-elixir-headless
   replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 2
   selector:
     matchLabels:
       app: ai-ha-elixir
