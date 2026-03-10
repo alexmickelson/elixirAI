@@ -6,6 +6,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    # ai.alex-kube.duckdns.org
     - host: $INGRESS_HOST
       http:
         paths:
