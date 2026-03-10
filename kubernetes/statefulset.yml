@@ -5,12 +5,12 @@ metadata:
   namespace: ai-ha-elixir
 spec:
   serviceName: ai-ha-elixir-headless
-  replicas: 3
+  replicas: 2
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 2
+      maxUnavailable: 1
   selector:
     matchLabels:
       app: ai-ha-elixir

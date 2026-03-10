@@ -104,7 +104,10 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:user_chat_message, message}, socket) do
-    {:noreply, update(socket, :messages, &(&1 ++ [message]))}
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [message]))
+     |> push_event("scroll_to_bottom", %{})}
   end
 
   def handle_info(

@@ -77,6 +77,9 @@ Hooks.ScrollBottom = {
       if (this.isNearBottom()) this.scrollToBottom()
     })
     this.observer.observe(this.el, {childList: true, subtree: true})
+    this.handleEvent("scroll_to_bottom", () => {
+      this.scrollToBottom()
+    })
   },
   updated() {
     if (this.isNearBottom()) this.scrollToBottom()
