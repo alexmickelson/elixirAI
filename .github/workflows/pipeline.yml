@@ -33,6 +33,7 @@ jobs:
           KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
           AI_TOKEN: ${{ secrets.AI_TOKEN }}
           INGRESS_HOST: ${{ vars.INGRESS_HOST }}
+          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
         run: |
           echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
           export KUBECONFIG=/tmp/elixir-kubeconfig.yml
@@ -53,3 +54,32 @@ jobs:
           for file in kubernetes/*.yml; do
             cat "$file" | envsubst | kubectl apply -f -
           done
+
+      - name: Verify Deployment
+        env:
+          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
+        run: |
+          echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
+          export KUBECONFIG=/tmp/elixir-kubeconfig.yml
+
+          echo "Waiting for StatefulSet rollout to complete..."
+          if ! kubectl rollout status statefulset/ai-ha-elixir --namespace ai-ha-elixir --timeout=180s --watch; then
+            echo "❌ StatefulSet rollout failed or timed out"
+            echo ""
+            echo "=== StatefulSet Status ==="
+            kubectl get statefulset ai-ha-elixir --namespace ai-ha-elixir -o wide
+            echo ""
+            echo "=== Pod Status ==="
+            kubectl get pods --namespace ai-ha-elixir -l app=ai-ha-elixir -o wide
+            echo ""
+            echo "=== Recent Events ==="
+            kubectl get events --namespace ai-ha-elixir --sort-by='.lastTimestamp' --field-selector type!=Normal | tail -30
+            echo ""
+            echo "=== StatefulSet Description ==="
+            kubectl describe statefulset ai-ha-elixir --namespace ai-ha-elixir
+            echo ""
+            echo "=== Pod Descriptions ==="
+            kubectl describe pods --namespace ai-ha-elixir -l app=ai-ha-elixir
+            exit 1
+          fi
+          echo "✅ StatefulSet rollout completed successfully"
