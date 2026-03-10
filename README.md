@@ -14,3 +14,6 @@ video ideas:
   - can autoscale with flame <https://hexdocs.pm/flame/FLAME.html>
     - tool calling scaling?
   - using elixir langchain for tool definitions
+
+
+real time blog: <https://seanmoriarity.com/2024/02/25/implementing-natural-conversational-agents-with-elixir/>

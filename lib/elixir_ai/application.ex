@@ -7,6 +7,7 @@ defmodule ElixirAi.Application do
     children = [
       ElixirAiWeb.Telemetry,
       ElixirAi.Repo,
+      {Task, fn -> ElixirAi.AiProvider.ensure_default_provider() end},
       {Cluster.Supervisor,
        [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
       {Phoenix.PubSub, name: ElixirAi.PubSub},

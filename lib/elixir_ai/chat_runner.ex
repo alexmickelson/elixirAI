@@ -45,7 +45,10 @@ defmodule ElixirAi.ChatRunner do
        messages: messages,
        streaming_response: nil,
        pending_tool_calls: [],
-       tools: tools(self(), name)
+       tools: tools(self(), name),
+       ai_provider_url: Application.get_env(:elixir_ai, :ai_provider_url),
+       ai_model: Application.get_env(:elixir_ai, :ai_model),
+       ai_token: Application.get_env(:elixir_ai, :ai_token),
      }}
   end
 

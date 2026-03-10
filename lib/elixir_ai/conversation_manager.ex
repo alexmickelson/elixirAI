@@ -17,13 +17,13 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def init(_) do
-    names = Conversation.all_names()
-    conversations = Map.new(names, fn name -> {name, []} end)
+    conversation_list = Conversation.all_names()
+    conversations = Map.new(conversation_list, fn %{name: name} -> {name, []} end)
     {:ok, conversations}
   end
 
-  def create_conversation(name) do
-    GenServer.call(@name, {:create, name})
+  def create_conversation(name, ai_provider_id) do
+    GenServer.call(@name, {:create, name, ai_provider_id})
   end
 
   def open_conversation(name) do
@@ -38,11 +38,11 @@ defmodule ElixirAi.ConversationManager do
     GenServer.call(@name, {:get_messages, name})
   end
 
-  def handle_call({:create, name}, _from, conversations) do
+  def handle_call({:create, name, ai_provider_id}, _from, conversations) do
     if Map.has_key?(conversations, name) do
       {:reply, {:error, :already_exists}, conversations}
     else
-      case Conversation.create(name) do
+      case Conversation.create(name, ai_provider_id) do
         :ok ->
           case start_and_subscribe(name) do
             {:ok, _pid} = ok -> {:reply, ok, Map.put(conversations, name, [])}
@@ -75,8 +75,6 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def handle_info({:store_message, name, message}, conversations) do
-    messages = Map.get(conversations, name, [])
-
     case Conversation.find_id(name) do
       {:ok, conv_id} -> Message.insert(conv_id, message)
       _ -> :ok

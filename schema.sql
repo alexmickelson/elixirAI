@@ -1,8 +1,24 @@
+-- drop table if exists messages cascade;
+-- drop table if exists conversations cascade;
+-- drop table if exists ai_providers cascade;
+
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT        NOT NULL UNIQUE,
+  model_name      TEXT        NOT NULL,
+  api_token       TEXT        NOT NULL,
+  completions_url TEXT        NOT NULL,
+  inserted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS conversations (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT        NOT NULL UNIQUE,
-  inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           TEXT        NOT NULL UNIQUE,
+  ai_provider_id UUID        NOT NULL REFERENCES ai_providers(id) ON DELETE RESTRICT,
+  inserted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS messages (
