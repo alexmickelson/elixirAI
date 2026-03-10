@@ -30,6 +30,7 @@ jobs:
         env:
           KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
           AI_TOKEN: ${{ secrets.AI_TOKEN }}
+          INGRESS_HOST: ${{ vars.INGRESS_HOST }}
         run: |
           echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
           export KUBECONFIG=/tmp/elixir-kubeconfig.yml
