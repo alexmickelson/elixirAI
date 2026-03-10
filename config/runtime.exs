@@ -28,6 +28,15 @@ if System.get_env("PHX_SERVER") do
   config :elixir_ai, ElixirAiWeb.Endpoint, server: true
 end
 
+# In dev mode, if DATABASE_URL is set (e.g., in Docker), use it instead of defaults
+if config_env() == :dev do
+  if database_url = System.get_env("DATABASE_URL") do
+    config :elixir_ai, ElixirAi.Repo,
+      url: database_url,
+      pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
+  end
+end
+
 if config_env() == :prod do
   secret_key_base =
     System.get_env("SECRET_KEY_BASE") ||

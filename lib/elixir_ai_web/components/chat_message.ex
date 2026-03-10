@@ -2,15 +2,26 @@ defmodule ElixirAiWeb.ChatMessage do
   use Phoenix.Component
   alias Phoenix.LiveView.JS
 
+  defp max_width_class, do: "max-w-300"
+
   attr :content, :string, required: true
   attr :tool_call_id, :string, required: true
 
   def tool_result_message(assigns) do
     ~H"""
-    <div class="mb-1 max-w-prose rounded-lg border border-cyan-900/40 bg-cyan-950/20 text-xs font-mono overflow-hidden">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900/40 bg-cyan-950/20 text-xs font-mono overflow-hidden"}>
       <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900/40 bg-cyan-900/10 text-cyan-600">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 shrink-0">
-          <path fill-rule="evenodd" d="M10 2a.75.75 0 0 1 .75.75v.258a33.186 33.186 0 0 1 6.668 2.372.75.75 0 1 1-.636 1.354 31.66 31.66 0 0 0-1.598-.632l1.44 7.402a.75.75 0 0 1-.26.726A18.698 18.698 0 0 1 10 15.75a18.698 18.698 0 0 1-6.364-1.518.75.75 0 0 1-.26-.726l1.44-7.402a31.66 31.66 0 0 0-1.598.632.75.75 0 1 1-.636-1.354 33.186 33.186 0 0 1 6.668-2.372V2.75A.75.75 0 0 1 10 2Z" clip-rule="evenodd" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-3 h-3 shrink-0"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M10 2a.75.75 0 0 1 .75.75v.258a33.186 33.186 0 0 1 6.668 2.372.75.75 0 1 1-.636 1.354 31.66 31.66 0 0 0-1.598-.632l1.44 7.402a.75.75 0 0 1-.26.726A18.698 18.698 0 0 1 10 15.75a18.698 18.698 0 0 1-6.364-1.518.75.75 0 0 1-.26-.726l1.44-7.402a31.66 31.66 0 0 0-1.598.632.75.75 0 1 1-.636-1.354 33.186 33.186 0 0 1 6.668-2.372V2.75A.75.75 0 0 1 10 2Z"
+            clip-rule="evenodd"
+          />
         </svg>
         <span class="text-cyan-600/70 flex-1 truncate">tool result</span>
         <span class="text-cyan-800 text-[10px] truncate max-w-[12rem]">{@tool_call_id}</span>
@@ -27,7 +38,7 @@ defmodule ElixirAiWeb.ChatMessage do
   def user_message(assigns) do
     ~H"""
     <div class="mb-2 text-sm text-right">
-      <div class="inline-block px-3 py-2 rounded-lg  bg-cyan-950 text-cyan-50 max-w-prose text-left">
+      <div class={"inline-block px-3 py-2 rounded-lg  bg-cyan-950 text-cyan-50 #{max_width_class()} text-left"}>
         {@content}
       </div>
     </div>
@@ -41,7 +52,10 @@ defmodule ElixirAiWeb.ChatMessage do
   def assistant_message(assigns) do
     assigns =
       assigns
-      |> assign(:_reasoning_id, "reasoning-#{:erlang.phash2({assigns.content, assigns.reasoning_content, assigns.tool_calls})}")
+      |> assign(
+        :_reasoning_id,
+        "reasoning-#{:erlang.phash2({assigns.content, assigns.reasoning_content, assigns.tool_calls})}"
+      )
       |> assign(:_expanded, false)
 
     ~H"""
@@ -101,8 +115,9 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-hook="MarkdownStream"
           phx-update="ignore"
           data-event="reasoning_chunk"
-          class="reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs max-w-prose mb-1 markdown"
-        ></div>
+          class={"reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs #{max_width_class()} mb-1 markdown"}
+        >
+        </div>
       </div>
       <%= for tool_call <- @tool_calls do %>
         <.tool_call_item tool_call={tool_call} />
@@ -112,8 +127,9 @@ defmodule ElixirAiWeb.ChatMessage do
         phx-hook="MarkdownStream"
         phx-update="ignore"
         data-event="md_chunk"
-        class="inline-block px-3 py-2 rounded-lg max-w-prose markdown bg-cyan-950/50"
-      ></div>
+        class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-cyan-950/50"}
+      >
+      </div>
     </div>
     """
   end
@@ -160,10 +176,11 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-update="ignore"
           data-md={@reasoning_content}
           class={[
-            "reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs max-w-prose mb-1 markdown",
+            "reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs #{max_width_class()} mb-1 markdown",
             !@expanded && "collapsed"
           ]}
-        ></div>
+        >
+        </div>
       <% end %>
       <%= for tool_call <- @tool_calls do %>
         <.tool_call_item tool_call={tool_call} />
@@ -174,8 +191,9 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-hook="MarkdownRender"
           phx-update="ignore"
           data-md={@content}
-          class="inline-block px-3 py-2 rounded-lg max-w-prose markdown bg-cyan-950/50"
-        ></div>
+          class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-cyan-950/50"}
+        >
+        </div>
       <% end %>
     </div>
     """
@@ -219,7 +237,7 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp pending_tool_call(assigns) do
     ~H"""
-    <div class="mb-1 max-w-prose rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
       <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900 bg-cyan-900/30 text-cyan-400">
         <.tool_call_icon />
         <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
@@ -239,19 +257,32 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp success_tool_call(assigns) do
     assigns =
-      assign(assigns, :result_str, case assigns.result do
-        s when is_binary(s) -> s
-        other -> inspect(other, pretty: true, limit: :infinity)
-      end)
+      assign(
+        assigns,
+        :result_str,
+        case assigns.result do
+          s when is_binary(s) -> s
+          other -> inspect(other, pretty: true, limit: :infinity)
+        end
+      )
 
     ~H"""
-    <div class="mb-1 max-w-prose rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
       <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900 bg-cyan-900/30 text-cyan-400">
         <.tool_call_icon />
         <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
         <span class="flex items-center gap-1 text-emerald-500">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
-            <path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
+              clip-rule="evenodd"
+            />
           </svg>
           <span class="text-[10px]">done</span>
         </span>
@@ -271,12 +302,17 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp error_tool_call(assigns) do
     ~H"""
-    <div class="mb-1 max-w-prose rounded-lg border border-red-900/50 bg-cyan-950/40 text-xs font-mono overflow-hidden">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-red-900/50 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
       <div class="flex items-center gap-2 px-3 py-1.5 border-b border-red-900/50 bg-red-900/20 text-cyan-400">
         <.tool_call_icon />
         <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
         <span class="flex items-center gap-1 text-red-500">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3"
+          >
             <path d="M8 15A7 7 0 1 0 8 1a7 7 0 0 0 0 14Zm0-10a.75.75 0 0 1 .75.75v3a.75.75 0 0 1-1.5 0v-3A.75.75 0 0 1 8 5Zm0 6.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
           </svg>
           <span class="text-[10px]">error</span>
@@ -295,10 +331,14 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp tool_call_args(%{arguments: args} = assigns) when args != "" do
     assigns =
-      assign(assigns, :pretty_args, case Jason.decode(args) do
-        {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-        _ -> args
-      end)
+      assign(
+        assigns,
+        :pretty_args,
+        case Jason.decode(args) do
+          {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
+          _ -> args
+        end
+      )
 
     ~H"""
     <div class="px-3 py-2 border-b border-cyan-900/50">
@@ -312,8 +352,17 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp tool_call_icon(assigns) do
     ~H"""
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 shrink-0">
-      <path fill-rule="evenodd" d="M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      class="w-3 h-3 shrink-0"
+    >
+      <path
+        fill-rule="evenodd"
+        d="M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06Z"
+        clip-rule="evenodd"
+      />
     </svg>
     """
   end

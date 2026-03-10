@@ -16,9 +16,7 @@ config :elixir_ai, ElixirAi.Repo,
 # watchers to your application. For example, we can use it
 # to bundle .js and .css sources.
 config :elixir_ai, ElixirAiWeb.Endpoint,
-  # Binding to loopback ipv4 address prevents access from other machines.
-  # Change to `ip: {0, 0, 0, 0}` to allow access from other machines.
-  http: [ip: {127, 0, 0, 1}, port: 4000],
+  http: [ip: {0, 0, 0, 0}, port: 4000],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -27,7 +25,6 @@ config :elixir_ai, ElixirAiWeb.Endpoint,
     esbuild: {Esbuild, :install_and_run, [:elixir_ai, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:elixir_ai, ~w(--watch)]}
   ]
-
 
 # Watch static and templates for browser reloading.
 config :elixir_ai, ElixirAiWeb.Endpoint,
