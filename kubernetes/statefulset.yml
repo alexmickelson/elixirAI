@@ -55,16 +55,16 @@ spec:
             httpGet:
               path: /health
               port: 4000
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 3
+            initialDelaySeconds: 2
+            periodSeconds: 1
+            failureThreshold: 2
           livenessProbe:
             httpGet:
               path: /health
               port: 4000
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            failureThreshold: 5
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 2
           resources:
             requests:
               memory: "256Mi"
