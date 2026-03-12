@@ -1,6 +1,7 @@
 defmodule ElixirAi.ConversationManager do
   use GenServer
   alias ElixirAi.{Conversation, Message}
+  require Logger
 
   @name {:via, Horde.Registry, {ElixirAi.ChatRegistry, __MODULE__}}
 
@@ -17,8 +18,19 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def init(_) do
+    Logger.info("ConversationManager initializing...")
     conversation_list = Conversation.all_names()
+    Logger.info("Loaded #{length(conversation_list)} conversations from DB")
+
+    # Log each conversation and check for UTF-8 issues
+    Enum.each(conversation_list, fn conv ->
+      Logger.info(
+        "Conversation: #{inspect(conv, limit: :infinity, printable_limit: :infinity, binaries: :as_binaries)}"
+      )
+    end)
+
     conversations = Map.new(conversation_list, fn %{name: name} -> {name, []} end)
+    Logger.info("Conversation map keys: #{inspect(Map.keys(conversations))}")
     {:ok, conversations}
   end
 
@@ -67,7 +79,13 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def handle_call(:list, _from, conversations) do
-    {:reply, Map.keys(conversations), conversations}
+    keys = Map.keys(conversations)
+
+    Logger.debug(
+      "list_conversations returning: #{inspect(keys, limit: :infinity, printable_limit: :infinity, binaries: :as_binaries)}"
+    )
+
+    {:reply, keys, conversations}
   end
 
   def handle_call({:get_messages, name}, _from, conversations) do

@@ -1,10 +1,11 @@
 defmodule ElixirAi.Message do
   import Ecto.Query
   alias ElixirAi.Repo
+  alias ElixirAi.Data.MessageSchema
 
   def load_for_conversation(conversation_id) do
     Repo.all(
-      from m in "messages",
+      from m in MessageSchema,
         where: m.conversation_id == ^conversation_id,
         order_by: m.id,
         select: %{

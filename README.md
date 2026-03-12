@@ -17,3 +17,12 @@ video ideas:
 
 
 real time blog: <https://seanmoriarity.com/2024/02/25/implementing-natural-conversational-agents-with-elixir/>
+
+
+
+
+elixir clustering examples and architecture: <https://oneuptime.com/blog/post/2026-01-26-elixir-distributed-systems/view>
+
+
+process groups for distributing workers across cluster: <https://memo.d.foundation/topics/elixir/pg-in-elixir>
+

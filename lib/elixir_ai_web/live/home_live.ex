@@ -2,16 +2,29 @@ defmodule ElixirAiWeb.HomeLive do
   use ElixirAiWeb, :live_view
   import ElixirAiWeb.FormComponents
   alias ElixirAi.{ConversationManager, AiProvider}
+  require Logger
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_providers")
     end
 
+    conversations = ConversationManager.list_conversations()
+
+    Logger.debug(
+      "Conversations: #{inspect(conversations, limit: :infinity, printable_limit: :infinity)}"
+    )
+
+    ai_providers = AiProvider.all()
+
+    Logger.debug(
+      "AI Providers: #{inspect(ai_providers, limit: :infinity, printable_limit: :infinity)}"
+    )
+
     {:ok,
      socket
-     |> assign(conversations: ConversationManager.list_conversations())
-     |> assign(ai_providers: AiProvider.all())
+     |> assign(conversations: conversations)
+     |> assign(ai_providers: ai_providers)
      |> assign(new_name: "")
      |> assign(error: nil)}
   end
@@ -62,9 +75,9 @@ defmodule ElixirAiWeb.HomeLive do
         <% end %>
       </div>
 
-      <div>
+      <%!-- <div>
         <.live_component module={ElixirAiWeb.AiProvidersLive} id="ai-providers" />
-      </div>
+      </div> --%>
     </div>
     """
   end

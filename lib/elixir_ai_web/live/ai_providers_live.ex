@@ -79,12 +79,6 @@ defmodule ElixirAiWeb.AiProvidersLive do
               <div class="flex-1">
                 <h3 class="text-sm font-medium text-cyan-300">{provider.name}</h3>
                 <p class="text-xs text-cyan-500 mt-1">Model: {provider.model_name}</p>
-                <p class="text-xs text-cyan-600 mt-1 truncate">
-                  Endpoint: {provider.completions_url}
-                </p>
-                <p class="text-xs text-cyan-600 mt-1">
-                  Token: {String.slice(provider.api_token || "", 0..7)}***
-                </p>
               </div>
             </div>
           </li>

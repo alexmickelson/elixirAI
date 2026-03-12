@@ -1,20 +1,33 @@
 defmodule ElixirAi.AiProvider do
   import Ecto.Query
   alias ElixirAi.Repo
+  alias ElixirAi.Data.AiProviderSchema
+  require Logger
 
   def all do
-    Repo.all(
-      from(p in "ai_providers",
-        select: %{
-          id: p.id,
-          name: p.name,
-          model_name: p.model_name,
-          api_token: p.api_token,
-          completions_url: p.completions_url
-        }
+    results =
+      Repo.all(
+        from(p in AiProviderSchema,
+          select: %{
+            id: p.id,
+            name: p.name,
+            model_name: p.model_name
+          }
+        )
       )
-    )
+      |> Enum.map(&convert_id_to_string/1)
+
+    Logger.debug("AiProvider.all() returning: #{inspect(results)}")
+
+    results
   end
+
+  # Convert binary UUID to string for frontend
+  defp convert_id_to_string(%{id: id} = provider) when is_binary(id) do
+    %{provider | id: Ecto.UUID.cast!(id)}
+  end
+
+  defp convert_id_to_string(provider), do: provider
 
   def create(attrs) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
@@ -62,7 +75,7 @@ defmodule ElixirAi.AiProvider do
            )
          ) do
       nil -> {:error, :not_found}
-      provider -> {:ok, provider}
+      provider -> {:ok, convert_id_to_string(provider)}
     end
   end
 
@@ -70,14 +83,10 @@ defmodule ElixirAi.AiProvider do
     case Repo.aggregate(from(p in "ai_providers"), :count) do
       0 ->
         attrs = %{
-          name: System.get_env("DEFAULT_PROVIDER_NAME", "default_provider"),
-          model_name: System.get_env("DEFAULT_MODEL_NAME", "gpt-4"),
-          api_token: System.get_env("DEFAULT_API_TOKEN", ""),
-          completions_url:
-            System.get_env(
-              "DEFAULT_COMPLETIONS_URL",
-              "https://api.openai.com/v1/chat/completions"
-            )
+          name: "default",
+          model_name: Application.fetch_env!(:elixir_ai, :ai_model),
+          api_token: Application.fetch_env!(:elixir_ai, :ai_token),
+          completions_url: Application.fetch_env!(:elixir_ai, :ai_endpoint)
         }
 
         create(attrs)
