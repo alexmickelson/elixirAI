@@ -26,3 +26,6 @@ elixir clustering examples and architecture: <https://oneuptime.com/blog/post/20
 
 process groups for distributing workers across cluster: <https://memo.d.foundation/topics/elixir/pg-in-elixir>
 
+
+
+zoi validation library: <https://elixirforum.com/t/zoi-schema-validation-library-inspired-by-zod/72108/17>

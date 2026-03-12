@@ -1,20 +1,37 @@
 defmodule ElixirAi.Message do
-  use ElixirAi.Data
-  alias ElixirAi.Repo
-  alias ElixirAi.Data.MessageSchema
+  alias ElixirAi.Data.DbHelpers
+  require Logger
 
-  def load_for_conversation(conversation_id, topic: topic) do
-    broadcast_error topic: topic do
-      with {:ok, db_conversation_id} <- dump_uuid(conversation_id) do
-        sql = """
-        SELECT role, content, reasoning_content, tool_calls, tool_call_id
-        FROM messages
-        WHERE conversation_id = $1
-        ORDER BY id
-        """
+  defmodule MessageSchema do
+    defstruct [:role, :content, :reasoning_content, :tool_calls, :tool_call_id]
 
-        result = Ecto.Adapters.SQL.query!(Repo, sql, [db_conversation_id])
+    def schema do
+      Zoi.object(%{
+        role: Zoi.enum([:user, :assistant, :tool]),
+        content: Zoi.optional(Zoi.string()),
+        reasoning_content: Zoi.optional(Zoi.string()),
+        tool_calls: Zoi.optional(Zoi.any()),
+        tool_call_id: Zoi.optional(Zoi.string())
+      })
+    end
+  end
 
+  def load_for_conversation(conversation_id, topic: topic)
+      when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
+    sql = """
+    SELECT role, content, reasoning_content, tool_calls, tool_call_id
+    FROM messages
+    WHERE conversation_id = $(conversation_id)
+    ORDER BY id
+    """
+
+    params = %{"conversation_id" => conversation_id}
+
+    case DbHelpers.run_sql(sql, params, topic) do
+      {:error, :db_error} ->
+        []
+
+      result ->
         Enum.map(result.rows, fn row ->
           raw = %{
             role: Enum.at(row, 0),
@@ -24,49 +41,67 @@ defmodule ElixirAi.Message do
             tool_call_id: Enum.at(row, 4)
           }
 
-          case Zoi.parse(MessageSchema.schema(), raw) do
+          decoded = decode_message(raw)
+
+          case Zoi.parse(MessageSchema.schema(), decoded) do
             {:ok, _valid} ->
-              struct(MessageSchema, decode_message(raw))
+              struct(MessageSchema, decoded)
 
             {:error, errors} ->
               Logger.error("Invalid message data from DB: #{inspect(errors)}")
               raise ArgumentError, "Invalid message data: #{inspect(errors)}"
           end
         end)
-      else
-        :error -> []
-      end
+    end
+  end
+
+  def load_for_conversation(conversation_id, topic: topic) do
+    case dump_uuid(conversation_id) do
+      {:ok, db_conversation_id} ->
+        load_for_conversation(db_conversation_id, topic: topic)
+
+      :error ->
+        []
+    end
+  end
+
+  def insert(conversation_id, message, topic: topic)
+      when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
+    sql = """
+    INSERT INTO messages (
+      conversation_id, role, content, reasoning_content,
+      tool_calls, tool_call_id, inserted_at
+    ) VALUES ($(conversation_id), $(role), $(content), $(reasoning_content), $(tool_calls), $(tool_call_id), $(inserted_at))
+    """
+
+    params = %{
+      "conversation_id" => conversation_id,
+      "role" => to_string(message.role),
+      "content" => message[:content],
+      "reasoning_content" => message[:reasoning_content],
+      "tool_calls" => encode_tool_calls(message[:tool_calls]),
+      "tool_call_id" => message[:tool_call_id],
+      "inserted_at" => DateTime.truncate(DateTime.utc_now(), :second)
+    }
+
+    case DbHelpers.run_sql(sql, params, topic) do
+      {:error, :db_error} ->
+        {:error, :db_error}
+
+      _result ->
+        # Logger.debug("Inserted message for conversation_id=#{Ecto.UUID.cast!(conversation_id)}")
+        {:ok, 1}
     end
   end
 
   def insert(conversation_id, message, topic: topic) do
-    broadcast_error topic: topic do
-      with {:ok, db_conversation_id} <- dump_uuid(conversation_id) do
-        sql = """
-        INSERT INTO messages (
-          conversation_id, role, content, reasoning_content,
-          tool_calls, tool_call_id, inserted_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        """
+    case dump_uuid(conversation_id) do
+      {:ok, db_conversation_id} ->
+        insert(db_conversation_id, message, topic: topic)
 
-        params = [
-          db_conversation_id,
-          to_string(message.role),
-          message[:content],
-          message[:reasoning_content],
-          encode_tool_calls(message[:tool_calls]),
-          message[:tool_call_id],
-          DateTime.truncate(DateTime.utc_now(), :second)
-        ]
-
-        Ecto.Adapters.SQL.query!(Repo, sql, params)
-        Logger.debug("Inserted message for conversation_id=#{Ecto.UUID.cast!(conversation_id)}")
-        {:ok, 1}
-      else
-        :error ->
-          Logger.error("Invalid conversation_id for message insert: #{inspect(conversation_id)}")
-          {:error, :invalid_conversation_id}
-      end
+      :error ->
+        Logger.error("Invalid conversation_id for message insert: #{inspect(conversation_id)}")
+        {:error, :invalid_conversation_id}
     end
   end
 
