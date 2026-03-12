@@ -1,16 +1,18 @@
 defmodule ElixirAi.Data.MessageSchema do
-  use Ecto.Schema
+  defstruct [
+    :id,
+    :conversation_id,
+    :role,
+    :content,
+    :reasoning_content,
+    :tool_calls,
+    :tool_call_id,
+    :inserted_at
+  ]
 
-  @primary_key {:id, :id, autogenerate: true}
-
-  schema "messages" do
-    belongs_to(:conversation, ElixirAi.Data.ConversationSchema, type: :binary_id)
-    field(:role, :string)
-    field(:content, :string)
-    field(:reasoning_content, :string)
-    field(:tool_calls, :map)
-    field(:tool_call_id, :string)
-
-    timestamps(inserted_at: :inserted_at, updated_at: false, type: :utc_datetime)
+  def schema do
+    Zoi.object(%{
+      role: Zoi.string()
+    })
   end
 end

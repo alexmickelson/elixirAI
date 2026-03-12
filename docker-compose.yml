@@ -6,8 +6,6 @@ services:
       POSTGRES_PASSWORD: elixir_ai
       POSTGRES_DB: elixir_ai_dev
     command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
-    ports:
-      - 5432:5432
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf

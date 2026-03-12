@@ -134,8 +134,6 @@ defmodule ElixirAiWeb.AiProvidersLive do
              )
              |> assign(error: nil)}
 
-          {:error, :already_exists} ->
-            {:noreply, assign(socket, error: "A provider with that name already exists")}
 
           _ ->
             {:noreply, assign(socket, error: "Failed to create provider")}

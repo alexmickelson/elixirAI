@@ -6,7 +6,7 @@ defmodule ElixirAi.ChatRunner do
 
   defp via(name), do: {:via, Horde.Registry, {ElixirAi.ChatRegistry, name}}
   defp topic(name), do: "ai_chat:#{name}"
-  defp message_topic(name), do: "conversation_messages:#{name}"
+  def message_topic(name), do: "conversation_messages:#{name}"
 
   def new_user_message(name, text_content) do
     GenServer.cast(via(name), {:user_message, text_content})
@@ -28,14 +28,17 @@ defmodule ElixirAi.ChatRunner do
   def init(name) do
     messages =
       case Conversation.find_id(name) do
-        {:ok, conv_id} -> Message.load_for_conversation(conv_id)
+        {:ok, conv_id} -> Message.load_for_conversation(conv_id, topic: message_topic(name))
         _ -> []
       end
 
     last_message = List.last(messages)
 
     if last_message && last_message.role == :user do
-      Logger.info("Last message role was #{last_message.role}, requesting AI response for conversation #{name}")
+      Logger.info(
+        "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
+      )
+
       request_ai_response(self(), messages, tools(self(), name))
     end
 
@@ -48,7 +51,7 @@ defmodule ElixirAi.ChatRunner do
        tools: tools(self(), name),
        ai_provider_url: Application.get_env(:elixir_ai, :ai_provider_url),
        ai_model: Application.get_env(:elixir_ai, :ai_model),
-       ai_token: Application.get_env(:elixir_ai, :ai_token),
+       ai_token: Application.get_env(:elixir_ai, :ai_token)
      }}
   end
 

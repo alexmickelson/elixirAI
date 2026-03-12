@@ -6,8 +6,9 @@ defmodule ElixirAi.Application do
   def start(_type, _args) do
     children = [
       ElixirAiWeb.Telemetry,
-      ElixirAi.Repo,
-      {Task, fn -> ElixirAi.AiProvider.ensure_default_provider() end},
+      # Conditionally start Repo (skip in test environment)
+      repo_child_spec(),
+      default_provider_task(),
       {Cluster.Supervisor,
        [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
@@ -39,5 +40,22 @@ defmodule ElixirAi.Application do
   def config_change(changed, _new, removed) do
     ElixirAiWeb.Endpoint.config_change(changed, removed)
     :ok
+  end
+
+  # Skip Repo and related tasks in test environment
+  defp repo_child_spec do
+    if Application.get_env(:elixir_ai, :env) == :test do
+      Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_repo)
+    else
+      ElixirAi.Repo
+    end
+  end
+
+  defp default_provider_task do
+    if Application.get_env(:elixir_ai, :env) == :test do
+      Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_default_provider)
+    else
+      {Task, fn -> ElixirAi.AiProvider.ensure_default_provider() end}
+    end
   end
 end

@@ -7,24 +7,13 @@ defmodule ElixirAiWeb.HomeLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_providers")
+      send(self(), :load_data)
     end
-
-    conversations = ConversationManager.list_conversations()
-
-    Logger.debug(
-      "Conversations: #{inspect(conversations, limit: :infinity, printable_limit: :infinity)}"
-    )
-
-    ai_providers = AiProvider.all()
-
-    Logger.debug(
-      "AI Providers: #{inspect(ai_providers, limit: :infinity, printable_limit: :infinity)}"
-    )
 
     {:ok,
      socket
-     |> assign(conversations: conversations)
-     |> assign(ai_providers: ai_providers)
+     |> assign(conversations: [])
+     |> assign(ai_providers: [])
      |> assign(new_name: "")
      |> assign(error: nil)}
   end
@@ -107,6 +96,25 @@ defmodule ElixirAiWeb.HomeLive do
             {:noreply, assign(socket, error: "Failed to create conversation")}
         end
     end
+  end
+
+  def handle_info(:load_data, socket) do
+    conversations = ConversationManager.list_conversations()
+
+    Logger.debug(
+      "Conversations: #{inspect(conversations, limit: :infinity, printable_limit: :infinity)}"
+    )
+
+    ai_providers = AiProvider.all()
+
+    Logger.debug(
+      "AI Providers: #{inspect(ai_providers, limit: :infinity, printable_limit: :infinity)}"
+    )
+
+    {:noreply,
+     socket
+     |> assign(conversations: conversations)
+     |> assign(ai_providers: ai_providers)}
   end
 
   def handle_info({:provider_added, _attrs}, socket) do

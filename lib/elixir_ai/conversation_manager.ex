@@ -19,19 +19,8 @@ defmodule ElixirAi.ConversationManager do
 
   def init(_) do
     Logger.info("ConversationManager initializing...")
-    conversation_list = Conversation.all_names()
-    Logger.info("Loaded #{length(conversation_list)} conversations from DB")
-
-    # Log each conversation and check for UTF-8 issues
-    Enum.each(conversation_list, fn conv ->
-      Logger.info(
-        "Conversation: #{inspect(conv, limit: :infinity, printable_limit: :infinity, binaries: :as_binaries)}"
-      )
-    end)
-
-    conversations = Map.new(conversation_list, fn %{name: name} -> {name, []} end)
-    Logger.info("Conversation map keys: #{inspect(Map.keys(conversations))}")
-    {:ok, conversations}
+    send(self(), :load_conversations)
+    {:ok, :loading_conversations}
   end
 
   def create_conversation(name, ai_provider_id) do
@@ -48,6 +37,15 @@ defmodule ElixirAi.ConversationManager do
 
   def get_messages(name) do
     GenServer.call(@name, {:get_messages, name})
+  end
+
+  def handle_call(message, from, :loading_conversations) do
+    Logger.warning(
+      "Received call #{inspect(message)} from #{inspect(from)} while loading conversations. Retrying after delay."
+    )
+
+    Process.send_after(self(), {:retry_call, message, from}, 100)
+    {:noreply, :loading_conversations}
   end
 
   def handle_call({:create, name, ai_provider_id}, _from, conversations) do
@@ -94,11 +92,35 @@ defmodule ElixirAi.ConversationManager do
 
   def handle_info({:store_message, name, message}, conversations) do
     case Conversation.find_id(name) do
-      {:ok, conv_id} -> Message.insert(conv_id, message)
-      _ -> :ok
+      {:ok, conv_id} ->
+        Message.insert(conv_id, message, topic: ElixirAi.ChatRunner.message_topic(name))
+
+      _ ->
+        :ok
     end
 
     {:noreply, Map.update(conversations, name, [message], &(&1 ++ [message]))}
+  end
+
+  def handle_info(:load_conversations, _conversations) do
+    conversation_list = Conversation.all_names()
+    Logger.info("Loaded #{length(conversation_list)} conversations from DB")
+
+    conversations = Map.new(conversation_list, fn %{name: name} -> {name, []} end)
+    Logger.info("Conversation map keys: #{inspect(Map.keys(conversations))}")
+    # {:ok, conversations}
+    {:noreply, conversations}
+  end
+
+  def handle_info({:retry_call, message, from}, state) do
+    case handle_call(message, from, state) do
+      {:reply, reply, new_state} ->
+        GenServer.reply(from, reply)
+        {:noreply, new_state}
+
+      {:noreply, new_state} ->
+        {:noreply, new_state}
+    end
   end
 
   defp start_and_subscribe(name) do
@@ -114,7 +136,7 @@ defmodule ElixirAi.ConversationManager do
 
     case result do
       {:ok, _pid} ->
-        Phoenix.PubSub.subscribe(ElixirAi.PubSub, "conversation_messages:#{name}")
+        Phoenix.PubSub.subscribe(ElixirAi.PubSub, ElixirAi.ChatRunner.message_topic(name))
         result
 
       _ ->

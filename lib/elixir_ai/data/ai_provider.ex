@@ -1,25 +1,31 @@
 defmodule ElixirAi.AiProvider do
-  import Ecto.Query
+  use ElixirAi.Data
   alias ElixirAi.Repo
   alias ElixirAi.Data.AiProviderSchema
-  require Logger
 
   def all do
-    results =
-      Repo.all(
-        from(p in AiProviderSchema,
-          select: %{
-            id: p.id,
-            name: p.name,
-            model_name: p.model_name
-          }
-        )
-      )
-      |> Enum.map(&convert_id_to_string/1)
+    broadcast_error topic: "ai_providers" do
+      sql = "SELECT id, name, model_name FROM ai_providers"
+      result = Ecto.Adapters.SQL.query!(Repo, sql, [])
 
-    Logger.debug("AiProvider.all() returning: #{inspect(results)}")
+      results =
+        Enum.map(result.rows, fn [id, name, model_name] ->
+          attrs = %{id: id, name: name, model_name: model_name} |> convert_id_to_string()
 
-    results
+          case Zoi.parse(AiProviderSchema.partial_schema(), attrs) do
+            {:ok, valid} ->
+              struct(AiProviderSchema, valid)
+
+            {:error, errors} ->
+              Logger.error("Invalid provider data from DB: #{inspect(errors)}")
+              raise ArgumentError, "Invalid provider data: #{inspect(errors)}"
+          end
+        end)
+
+      Logger.debug("AiProvider.all() returning: #{inspect(results)}")
+
+      results
+    end
   end
 
   # Convert binary UUID to string for frontend
@@ -30,69 +36,83 @@ defmodule ElixirAi.AiProvider do
   defp convert_id_to_string(provider), do: provider
 
   def create(attrs) do
-    now = DateTime.truncate(DateTime.utc_now(), :second)
+    broadcast_error topic: "ai_providers" do
+      now = DateTime.truncate(DateTime.utc_now(), :second)
 
-    case Repo.insert_all("ai_providers", [
-           [
-             name: attrs.name,
-             model_name: attrs.model_name,
-             api_token: attrs.api_token,
-             completions_url: attrs.completions_url,
-             inserted_at: now,
-             updated_at: now
-           ]
-         ]) do
-      {1, _} ->
-        Phoenix.PubSub.broadcast(
-          ElixirAi.PubSub,
-          "ai_providers",
-          {:provider_added, attrs}
-        )
+      sql = """
+      INSERT INTO ai_providers (name, model_name, api_token, completions_url, inserted_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      """
 
-        :ok
+      params = [attrs.name, attrs.model_name, attrs.api_token, attrs.completions_url, now, now]
 
-      _ ->
-        {:error, :db_error}
+      Ecto.Adapters.SQL.query!(Repo, sql, params)
+
+      Phoenix.PubSub.broadcast(
+        ElixirAi.PubSub,
+        "ai_providers",
+        {:provider_added, attrs}
+      )
+
+      :ok
     end
-  rescue
-    e in Ecto.ConstraintError ->
-      if e.constraint == "ai_providers_name_key",
-        do: {:error, :already_exists},
-        else: {:error, :db_error}
   end
 
   def find_by_name(name) do
-    case Repo.one(
-           from(p in "ai_providers",
-             where: p.name == ^name,
-             select: %{
-               id: p.id,
-               name: p.name,
-               model_name: p.model_name,
-               api_token: p.api_token,
-               completions_url: p.completions_url
-             }
-           )
-         ) do
-      nil -> {:error, :not_found}
-      provider -> {:ok, convert_id_to_string(provider)}
+    broadcast_error topic: "ai_providers" do
+      sql = """
+      SELECT id, name, model_name, api_token, completions_url
+      FROM ai_providers
+      WHERE name = $1
+      LIMIT 1
+      """
+
+      case Ecto.Adapters.SQL.query!(Repo, sql, [name]) do
+        %{rows: []} ->
+          {:error, :not_found}
+
+        %{rows: [[id, name, model_name, api_token, completions_url] | _]} ->
+          attrs =
+            %{
+              id: id,
+              name: name,
+              model_name: model_name,
+              api_token: api_token,
+              completions_url: completions_url
+            }
+            |> convert_id_to_string()
+
+          case Zoi.parse(AiProviderSchema.schema(), attrs) do
+            {:ok, valid} ->
+              {:ok, struct(AiProviderSchema, valid)}
+
+            {:error, errors} ->
+              Logger.error("Invalid provider data from DB: #{inspect(errors)}")
+              {:error, :invalid_data}
+          end
+      end
     end
   end
 
   def ensure_default_provider do
-    case Repo.aggregate(from(p in "ai_providers"), :count) do
-      0 ->
-        attrs = %{
-          name: "default",
-          model_name: Application.fetch_env!(:elixir_ai, :ai_model),
-          api_token: Application.fetch_env!(:elixir_ai, :ai_token),
-          completions_url: Application.fetch_env!(:elixir_ai, :ai_endpoint)
-        }
+    broadcast_error topic: "ai_providers" do
+      sql = "SELECT COUNT(*) FROM ai_providers"
+      result = Ecto.Adapters.SQL.query!(Repo, sql, [])
 
-        create(attrs)
+      case result.rows do
+        [[0]] ->
+          attrs = %{
+            name: "default",
+            model_name: Application.fetch_env!(:elixir_ai, :ai_model),
+            api_token: Application.fetch_env!(:elixir_ai, :ai_token),
+            completions_url: Application.fetch_env!(:elixir_ai, :ai_endpoint)
+          }
 
-      _ ->
-        :ok
+          create(attrs)
+
+        _ ->
+          :ok
+      end
     end
   end
 end

@@ -1,15 +1,21 @@
 defmodule ElixirAi.Data.AiProviderSchema do
-  use Ecto.Schema
+  defstruct [:id, :name, :model_name, :api_token, :completions_url, :inserted_at, :updated_at]
 
-  @primary_key {:id, :binary_id, autogenerate: true}
-  @foreign_key_type :binary_id
+  def schema do
+    Zoi.object(%{
+      id: Zoi.string(),
+      name: Zoi.string(),
+      model_name: Zoi.string(),
+      api_token: Zoi.string(),
+      completions_url: Zoi.string()
+    })
+  end
 
-  schema "ai_providers" do
-    field(:name, :string)
-    field(:model_name, :string)
-    field(:api_token, :string)
-    field(:completions_url, :string)
-
-    timestamps(type: :utc_datetime)
+  def partial_schema do
+    Zoi.object(%{
+      id: Zoi.string(),
+      name: Zoi.string(),
+      model_name: Zoi.string()
+    })
   end
 end

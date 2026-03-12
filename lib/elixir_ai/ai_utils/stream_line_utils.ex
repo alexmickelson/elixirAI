@@ -123,7 +123,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         %{
           "choices" => [%{"finish_reason" => "tool_calls"}],
           "id" => id
-        } = message
+        }
       ) do
     # Logger.info("Received tool_calls_finished with message: #{inspect(message)}")
     send(server, {:ai_tool_call_end, id})

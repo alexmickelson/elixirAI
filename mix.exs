@@ -59,7 +59,8 @@ defmodule ElixirAi.MixProject do
       {:ecto_sql, "~> 3.11"},
       {:postgrex, ">= 0.0.0"},
       {:horde, "~> 0.9"},
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:zoi, "~> 0.17"}
     ]
   end
 
