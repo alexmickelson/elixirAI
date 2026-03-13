@@ -109,6 +109,11 @@ defmodule ElixirAi.ConversationManager do
     {:reply, Map.get(conversations, name, []), state}
   end
 
+  def handle_info({:db_error, reason}, state) do
+    Logger.error("ConversationManager received db_error: #{inspect(reason)}")
+    {:noreply, state}
+  end
+
   def handle_info({:store_message, name, message}, %{conversations: conversations} = state) do
     case Conversation.find_id(name) do
       {:ok, conv_id} ->

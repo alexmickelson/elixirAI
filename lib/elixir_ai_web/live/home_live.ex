@@ -24,50 +24,59 @@ defmodule ElixirAiWeb.HomeLive do
       <div>
         <h1 class="text-lg font-semibold text-cyan-300 mb-8">Conversations</h1>
 
-        <ul class="mb-8 space-y-2">
-          <%= if @conversations == [] do %>
-            <li class="text-sm text-cyan-700">No conversations yet.</li>
-          <% end %>
-          <%= for name <- @conversations do %>
-            <li>
-              <.link
-                navigate={~p"/chat/#{name}"}
-                class="block px-4 py-2 rounded-lg border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors text-sm"
-              >
-                {name}
-              </.link>
-            </li>
-          <% end %>
-        </ul>
+        <.conversation_list conversations={@conversations} />
 
-        <form phx-submit="create" class="space-y-2">
-          <.input type="text" name="name" value={@new_name} label="Conversation Name" />
-          <select
-            name="ai_provider_id"
-            class="w-full rounded px-3 py-2 text-sm bg-cyan-950/20 border border-cyan-900/40 text-cyan-100 focus:outline-none focus:ring-1 focus:ring-cyan-700"
-          >
-            <option value="">Select AI Provider</option>
-            <%= for provider <- @ai_providers do %>
-              <option value={provider.id}>{provider.name} - {provider.model_name}</option>
-            <% end %>
-          </select>
-          <button
-            type="submit"
-            class="w-full px-4 py-2 rounded text-sm border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors"
-          >
-            Create
-          </button>
-        </form>
+        <.create_conversation_form new_name={@new_name} ai_providers={@ai_providers} />
 
         <%= if @error do %>
           <p class="mt-2 text-sm text-red-400">{@error}</p>
         <% end %>
       </div>
-
-      <%!-- <div>
-        <.live_component module={ElixirAiWeb.AiProvidersLive} id="ai-providers" />
-      </div> --%>
     </div>
+    """
+  end
+
+  defp conversation_list(assigns) do
+    ~H"""
+    <ul class="mb-8 space-y-2">
+      <%= if @conversations == [] do %>
+        <li class="text-sm text-cyan-700">No conversations yet.</li>
+      <% end %>
+      <%= for name <- @conversations do %>
+        <li>
+          <.link
+            navigate={~p"/chat/#{name}"}
+            class="block px-4 py-2 rounded-lg border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors text-sm"
+          >
+            {name}
+          </.link>
+        </li>
+      <% end %>
+    </ul>
+    """
+  end
+
+  defp create_conversation_form(assigns) do
+    ~H"""
+    <form phx-submit="create" class="space-y-2">
+      <.input type="text" name="name" value={@new_name} label="Conversation Name" />
+      <select
+        name="ai_provider_id"
+        class="w-full rounded px-3 py-2 text-sm bg-cyan-950/20 border border-cyan-900/40 text-cyan-100 focus:outline-none focus:ring-1 focus:ring-cyan-700"
+      >
+        <%= for {provider, index} <- Enum.with_index(@ai_providers) do %>
+          <option value={provider.id} selected={index == 0}>
+            {provider.name} - {provider.model_name}
+          </option>
+        <% end %>
+      </select>
+      <button
+        type="submit"
+        class="w-full px-4 py-2 rounded text-sm border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors"
+      >
+        Create
+      </button>
+    </form>
     """
   end
 

@@ -7,19 +7,23 @@ defmodule ElixirAi.Data.DbHelpers do
   end
 
   def run_sql(sql, params, topic) do
+    original_sql = sql
+    original_params = params
     {sql, params} = named_params_to_positional_params(sql, params)
 
     try do
       result = Ecto.Adapters.SQL.query!(ElixirAi.Repo, sql, params)
 
       # Transform rows to maps with column names as keys
-      Enum.map(result.rows, fn row ->
+      Enum.map(result.rows || [], fn row ->
         Enum.zip(result.columns, row)
         |> Enum.into(%{})
       end)
     rescue
       exception ->
         Logger.error("Database error: #{Exception.message(exception)}")
+        Logger.error("Failed SQL: #{original_sql}")
+        Logger.error("SQL params: #{inspect(original_params, pretty: true)}")
 
         Phoenix.PubSub.broadcast(
           ElixirAi.PubSub,

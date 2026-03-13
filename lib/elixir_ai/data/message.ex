@@ -73,7 +73,7 @@ defmodule ElixirAi.Message do
       $(role),
       $(content),
       $(reasoning_content),
-      $(tool_calls),
+      $(tool_calls)::jsonb,
       $(tool_call_id),
       $(inserted_at)
     )
