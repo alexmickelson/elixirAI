@@ -36,7 +36,6 @@ defmodule ElixirAi.ChatUtils do
     %{
       name: name,
       definition: schema,
-      # function: function,
       run_function: run_function
     }
   end

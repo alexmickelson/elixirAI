@@ -1,5 +1,5 @@
 defmodule SQLTest do
-  use ExUnit.Case
+  use ElixirAi.TestCase
   alias ElixirAi.Data.DbHelpers
 
   test "converts simple named parameters" do

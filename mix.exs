@@ -60,6 +60,7 @@ defmodule ElixirAi.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:horde, "~> 0.9"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:mimic, "~> 2.3.0"},
       {:zoi, "~> 0.17"}
     ]
   end

@@ -1,7 +1,7 @@
 defmodule ElixirAi.ChatRunner do
   require Logger
   use GenServer
-  import ElixirAi.ChatUtils
+  import ElixirAi.ChatUtils, only: [ai_tool: 1]
   alias ElixirAi.{Conversation, Message}
 
   defp via(name), do: {:via, Horde.Registry, {ElixirAi.ChatRegistry, name}}
@@ -39,7 +39,7 @@ defmodule ElixirAi.ChatRunner do
         "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
       )
 
-      request_ai_response(self(), messages, tools(self(), name))
+      ElixirAi.ChatUtils.request_ai_response(self(), messages, tools(self(), name))
     end
 
     {:ok,
@@ -103,7 +103,7 @@ defmodule ElixirAi.ChatRunner do
     store_message(state.name, new_message)
     new_state = %{state | messages: state.messages ++ [new_message]}
 
-    request_ai_response(self(), new_state.messages, state.tools)
+    ElixirAi.ChatUtils.request_ai_response(self(), new_state.messages, state.tools)
     {:noreply, new_state}
   end
 
@@ -283,7 +283,7 @@ defmodule ElixirAi.ChatRunner do
 
     if new_pending_tool_calls == [] do
       broadcast_ui(state.name, :tool_calls_finished)
-      request_ai_response(self(), state.messages ++ [new_message], state.tools)
+      ElixirAi.ChatUtils.request_ai_response(self(), state.messages ++ [new_message], state.tools)
     end
 
     {:noreply,

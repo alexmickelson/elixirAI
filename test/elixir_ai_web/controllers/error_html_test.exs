@@ -1,5 +1,5 @@
 defmodule ElixirAiWeb.ErrorHTMLTest do
-  use ElixirAiWeb.ConnCase, async: true
+  use ElixirAiWeb.ConnCase, async: false
 
   # Bring render_to_string/4 for testing custom views
   import Phoenix.Template

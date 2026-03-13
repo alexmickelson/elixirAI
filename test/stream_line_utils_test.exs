@@ -1,5 +1,6 @@
 defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
-  use ExUnit.Case
+  use ElixirAi.TestCase
+  @moduletag capture_log: true
   import ElixirAi.StreamChunkHelpers
   alias ElixirAi.AiUtils.StreamLineUtils
 

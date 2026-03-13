@@ -1,5 +1,5 @@
 defmodule ElixirAiWeb.ErrorJSONTest do
-  use ElixirAiWeb.ConnCase, async: true
+  use ElixirAiWeb.ConnCase, async: false
 
   test "renders 404" do
     assert ElixirAiWeb.ErrorJSON.render("404.json", %{}) == %{errors: %{detail: "Not Found"}}
