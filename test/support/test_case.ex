@@ -13,7 +13,11 @@ defmodule ElixirAi.TestCase do
   setup do
     stub(ElixirAi.Data.DbHelpers, :run_sql, fn _sql, _params, _topic -> [] end)
     stub(ElixirAi.Data.DbHelpers, :run_sql, fn _sql, _params, _topic, _schema -> [] end)
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools -> :ok end)
+
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
+      :ok
+    end)
+
     :ok
   end
 end

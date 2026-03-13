@@ -113,5 +113,23 @@ defmodule ElixirAi.Conversation do
     end
   end
 
+  def find_provider(name) do
+    sql = """
+    SELECT p.name, p.model_name, p.api_token, p.completions_url
+    FROM conversations c
+    JOIN ai_providers p ON c.ai_provider_id = p.id
+    WHERE c.name = $(name)
+    LIMIT 1
+    """
+
+    params = %{"name" => name}
+
+    case DbHelpers.run_sql(sql, params, "conversations", Provider.schema()) do
+      {:error, _} -> {:error, :db_error}
+      [] -> {:error, :not_found}
+      [row | _] -> {:ok, struct(Provider, row)}
+    end
+  end
+
   defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
 end

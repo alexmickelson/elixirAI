@@ -52,25 +52,16 @@ defmodule ElixirAi.ConversationManager do
   def handle_call(
         {:create, name, ai_provider_id},
         _from,
-        %{conversations: conversations, subscriptions: subscriptions} = state
+        %{conversations: conversations} = state
       ) do
     if Map.has_key?(conversations, name) do
       {:reply, {:error, :already_exists}, state}
     else
       case Conversation.create(name, ai_provider_id) do
         :ok ->
-          case start_and_subscribe(name, subscriptions) do
-            {:ok, pid, new_subscriptions} ->
-              {:reply, {:ok, pid},
-               %{
-                 state
-                 | conversations: Map.put(conversations, name, []),
-                   subscriptions: new_subscriptions
-               }}
-
-            {:error, _reason} = error ->
-              {:reply, error, state}
-          end
+          reply_with_started(name, state, fn new_state ->
+            %{new_state | conversations: Map.put(new_state.conversations, name, [])}
+          end)
 
         {:error, _} = error ->
           {:reply, error, state}
@@ -81,16 +72,10 @@ defmodule ElixirAi.ConversationManager do
   def handle_call(
         {:open, name},
         _from,
-        %{conversations: conversations, subscriptions: subscriptions} = state
+        %{conversations: conversations} = state
       ) do
     if Map.has_key?(conversations, name) do
-      case start_and_subscribe(name, subscriptions) do
-        {:ok, pid, new_subscriptions} ->
-          {:reply, {:ok, pid}, %{state | subscriptions: new_subscriptions}}
-
-        {:error, _reason} = error ->
-          {:reply, error, state}
-      end
+      reply_with_started(name, state)
     else
       {:reply, {:error, :not_found}, state}
     end
@@ -145,6 +130,17 @@ defmodule ElixirAi.ConversationManager do
 
       {:noreply, new_state} ->
         {:noreply, new_state}
+    end
+  end
+
+  defp reply_with_started(name, state, update_state \\ fn s -> s end) do
+    case start_and_subscribe(name, state.subscriptions) do
+      {:ok, pid, new_subscriptions} ->
+        new_state = update_state.(%{state | subscriptions: new_subscriptions})
+        {:reply, {:ok, pid}, new_state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
     end
   end
 

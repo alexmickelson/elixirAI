@@ -48,7 +48,10 @@ defmodule ElixirAi.MessageStorageTest do
 
   test "run_sql is called with user message params" do
     conv_name = setup_conversation()
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools -> :ok end)
+
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
+      :ok
+    end)
 
     ElixirAi.ChatRunner.new_user_message(conv_name, "hello world")
 
@@ -60,7 +63,7 @@ defmodule ElixirAi.MessageStorageTest do
   test "run_sql is called with assistant message params" do
     conv_name = setup_conversation()
 
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools ->
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools, _provider ->
       id = make_ref()
       send(server, {:start_new_ai_response, id})
       send(server, {:ai_text_chunk, id, "Hello from AI"})
@@ -80,7 +83,7 @@ defmodule ElixirAi.MessageStorageTest do
     conv_name = setup_conversation()
 
     # First AI call triggers the tool; subsequent calls (after tool completes) are no-ops.
-    expect(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools ->
+    expect(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools, _provider ->
       id = make_ref()
       send(server, {:start_new_ai_response, id})
 
@@ -93,7 +96,9 @@ defmodule ElixirAi.MessageStorageTest do
       :ok
     end)
 
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools -> :ok end)
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
+      :ok
+    end)
 
     ElixirAi.ChatRunner.new_user_message(conv_name, "store something")
 

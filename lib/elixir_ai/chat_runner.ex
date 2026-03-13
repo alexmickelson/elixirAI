@@ -38,12 +38,18 @@ defmodule ElixirAi.ChatRunner do
 
     last_message = List.last(messages)
 
+    provider =
+      case Conversation.find_provider(name) do
+        {:ok, p} -> p
+        _ -> nil
+      end
+
     if last_message && last_message.role == :user do
       Logger.info(
         "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
       )
 
-      ElixirAi.ChatUtils.request_ai_response(self(), messages, tools(self(), name))
+      ElixirAi.ChatUtils.request_ai_response(self(), messages, tools(self(), name), provider)
     end
 
     {:ok,
@@ -53,9 +59,7 @@ defmodule ElixirAi.ChatRunner do
        streaming_response: nil,
        pending_tool_calls: [],
        tools: tools(self(), name),
-       ai_provider_url: Application.get_env(:elixir_ai, :ai_provider_url),
-       ai_model: Application.get_env(:elixir_ai, :ai_model),
-       ai_token: Application.get_env(:elixir_ai, :ai_token)
+       provider: provider
      }}
   end
 
@@ -107,7 +111,13 @@ defmodule ElixirAi.ChatRunner do
     store_message(state.name, new_message)
     new_state = %{state | messages: state.messages ++ [new_message]}
 
-    ElixirAi.ChatUtils.request_ai_response(self(), new_state.messages, state.tools)
+    ElixirAi.ChatUtils.request_ai_response(
+      self(),
+      new_state.messages,
+      state.tools,
+      state.provider
+    )
+
     {:noreply, new_state}
   end
 
@@ -296,7 +306,13 @@ defmodule ElixirAi.ChatRunner do
 
     if new_pending_tool_calls == [] do
       broadcast_ui(state.name, :tool_calls_finished)
-      ElixirAi.ChatUtils.request_ai_response(self(), state.messages ++ [new_message], state.tools)
+
+      ElixirAi.ChatUtils.request_ai_response(
+        self(),
+        state.messages ++ [new_message],
+        state.tools,
+        state.provider
+      )
     end
 
     {:noreply,

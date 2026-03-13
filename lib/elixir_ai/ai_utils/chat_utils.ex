@@ -40,11 +40,11 @@ defmodule ElixirAi.ChatUtils do
     }
   end
 
-  def request_ai_response(server, messages, tools) do
+  def request_ai_response(server, messages, tools, provider) do
     Task.start(fn ->
-      api_url = Application.fetch_env!(:elixir_ai, :ai_endpoint)
-      api_key = Application.fetch_env!(:elixir_ai, :ai_token)
-      model = Application.fetch_env!(:elixir_ai, :ai_model)
+      api_url = provider.completions_url
+      api_key = provider.api_token
+      model = provider.model_name
 
       if is_nil(api_url) or api_url == "" do
         Logger.warning("AI endpoint is empty or nil")
