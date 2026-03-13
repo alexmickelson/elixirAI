@@ -1,6 +1,7 @@
 defmodule ElixirAi.AiProvider do
   alias ElixirAi.Data.DbHelpers
   require Logger
+  import ElixirAi.PubsubTopics
 
   defmodule AiProviderSchema do
     defstruct [:id, :name, :model_name, :api_token, :completions_url]
@@ -77,14 +78,14 @@ defmodule ElixirAi.AiProvider do
       "updated_at" => now
     }
 
-    case DbHelpers.run_sql(sql, params, "ai_providers") do
+    case DbHelpers.run_sql(sql, params, providers_topic()) do
       {:error, :db_error} ->
         {:error, :db_error}
 
       _result ->
         Phoenix.PubSub.broadcast(
           ElixirAi.PubSub,
-          "ai_providers",
+          providers_topic(),
           {:provider_added, attrs}
         )
 
@@ -102,7 +103,7 @@ defmodule ElixirAi.AiProvider do
 
     params = %{"name" => name}
 
-    case DbHelpers.run_sql(sql, params, "ai_providers", AiProviderSchema.schema()) do
+    case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.schema()) do
       {:error, _} -> {:error, :db_error}
       [] -> {:error, :not_found}
       [row | _] -> {:ok, row |> convert_uuid_to_string() |> then(&struct(AiProviderSchema, &1))}
@@ -113,7 +114,7 @@ defmodule ElixirAi.AiProvider do
     sql = "SELECT COUNT(*) FROM ai_providers"
     params = %{}
 
-    case DbHelpers.run_sql(sql, params, "ai_providers") do
+    case DbHelpers.run_sql(sql, params, providers_topic()) do
       {:error, :db_error} ->
         {:error, :db_error}
 

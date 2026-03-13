@@ -5,6 +5,7 @@ defmodule ElixirAiWeb.ChatLive do
   import ElixirAiWeb.ChatMessage
   alias ElixirAi.ChatRunner
   alias ElixirAi.ConversationManager
+  import ElixirAi.PubsubTopics
 
   def valid_background_colors do
     [
@@ -21,8 +22,10 @@ defmodule ElixirAiWeb.ChatLive do
   def mount(%{"name" => name}, _session, socket) do
     case ConversationManager.open_conversation(name) do
       {:ok, _pid} ->
-        if connected?(socket),
-          do: Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_chat:#{name}")
+        if connected?(socket) do
+          Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
+          Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
+        end
 
         conversation = ChatRunner.get_conversation(name)
 
@@ -32,7 +35,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(user_input: "")
          |> assign(messages: conversation.messages)
          |> assign(streaming_response: conversation.streaming_response)
-         |> assign(background_color: "bg-cyan-950/30")}
+         |> assign(background_color: "bg-cyan-950/30")
+         |> assign(db_error: nil)}
 
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
@@ -48,6 +52,11 @@ defmodule ElixirAiWeb.ChatLive do
         </.link>
         {@conversation_name}
       </div>
+      <%= if @db_error do %>
+        <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
+          Database error: {@db_error}
+        </div>
+      <% end %>
       <div
         id="chat-messages"
         phx-hook="ScrollBottom"
@@ -189,6 +198,10 @@ defmodule ElixirAiWeb.ChatLive do
      socket
      |> update(:messages, &(&1 ++ [final_message]))
      |> assign(streaming_response: nil)}
+  end
+
+  def handle_info({:db_error, reason}, socket) do
+    {:noreply, assign(socket, db_error: reason)}
   end
 
   def handle_info({:set_background_color, color}, socket) do

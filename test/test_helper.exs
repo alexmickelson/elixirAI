@@ -1,3 +1,5 @@
 ExUnit.start()
 Mimic.copy(ElixirAi.Data.DbHelpers)
 Mimic.copy(ElixirAi.ChatUtils)
+Mimic.copy(ElixirAi.ConversationManager)
+Mimic.copy(ElixirAi.ChatRunner)

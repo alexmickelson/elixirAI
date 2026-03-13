@@ -1,6 +1,7 @@
 defmodule ElixirAi.ConversationManager do
   use GenServer
   alias ElixirAi.{Conversation, Message}
+  import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1]
   require Logger
 
   @name {:via, Horde.Registry, {ElixirAi.ChatRegistry, __MODULE__}}
@@ -117,7 +118,7 @@ defmodule ElixirAi.ConversationManager do
   def handle_info({:store_message, name, message}, %{conversations: conversations} = state) do
     case Conversation.find_id(name) do
       {:ok, conv_id} ->
-        Message.insert(conv_id, message, topic: ElixirAi.ChatRunner.message_topic(name))
+        Message.insert(conv_id, message, topic: conversation_message_topic(name))
 
       _ ->
         :ok
@@ -164,7 +165,7 @@ defmodule ElixirAi.ConversationManager do
           if MapSet.member?(subscriptions, name) do
             subscriptions
           else
-            Phoenix.PubSub.subscribe(ElixirAi.PubSub, ElixirAi.ChatRunner.message_topic(name))
+            Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
             MapSet.put(subscriptions, name)
           end
 

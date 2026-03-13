@@ -3,10 +3,11 @@ defmodule ElixirAiWeb.HomeLive do
   import ElixirAiWeb.FormComponents
   alias ElixirAi.{ConversationManager, AiProvider}
   require Logger
+  import ElixirAi.PubsubTopics
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_providers")
+      Phoenix.PubSub.subscribe(ElixirAi.PubSub, providers_topic())
       send(self(), :load_data)
     end
 

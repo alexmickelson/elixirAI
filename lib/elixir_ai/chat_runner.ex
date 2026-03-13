@@ -3,10 +3,9 @@ defmodule ElixirAi.ChatRunner do
   use GenServer
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
   alias ElixirAi.{Conversation, Message}
+  import ElixirAi.PubsubTopics
 
   defp via(name), do: {:via, Horde.Registry, {ElixirAi.ChatRegistry, name}}
-  defp topic(name), do: "ai_chat:#{name}"
-  def message_topic(name), do: "conversation_messages:#{name}"
 
   def new_user_message(name, text_content) do
     GenServer.cast(via(name), {:user_message, text_content})
@@ -28,7 +27,7 @@ defmodule ElixirAi.ChatRunner do
   def init(name) do
     messages =
       case Conversation.find_id(name) do
-        {:ok, conv_id} -> Message.load_for_conversation(conv_id, topic: message_topic(name))
+        {:ok, conv_id} -> Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))
         _ -> []
       end
 
@@ -78,7 +77,7 @@ defmodule ElixirAi.ChatRunner do
         function: fn %{"color" => color} ->
           Phoenix.PubSub.broadcast(
             ElixirAi.PubSub,
-            "ai_chat:#{name}",
+            chat_topic(name),
             {:set_background_color, color}
           )
         end,
@@ -309,7 +308,7 @@ defmodule ElixirAi.ChatRunner do
     {:reply, state.streaming_response, state}
   end
 
-  defp broadcast_ui(name, msg), do: Phoenix.PubSub.broadcast(ElixirAi.PubSub, topic(name), msg)
+  defp broadcast_ui(name, msg), do: Phoenix.PubSub.broadcast(ElixirAi.PubSub, chat_topic(name), msg)
 
   defp store_message(name, messages) when is_list(messages) do
     Enum.each(messages, &store_message(name, &1))
@@ -319,7 +318,7 @@ defmodule ElixirAi.ChatRunner do
   defp store_message(name, message) do
     Phoenix.PubSub.broadcast(
       ElixirAi.PubSub,
-      message_topic(name),
+      conversation_message_topic(name),
       {:store_message, name, message}
     )
 

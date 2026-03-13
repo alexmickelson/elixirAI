@@ -2,10 +2,11 @@ defmodule ElixirAiWeb.AiProvidersLive do
   use ElixirAiWeb, :live_component
   import ElixirAiWeb.FormComponents
   alias ElixirAi.AiProvider
+  import ElixirAi.PubsubTopics
 
   def update(assigns, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(ElixirAi.PubSub, "ai_providers")
+      Phoenix.PubSub.subscribe(ElixirAi.PubSub, providers_topic())
     end
 
     {:ok,
