@@ -21,7 +21,7 @@ defmodule ElixirAiWeb.AiProvidersLive do
            "name" => "",
            "model_name" => "",
            "api_token" => "",
-           "completions_url" => "https://api.openai.com/v1/chat/completions"
+           "completions_url" => ""
          }
        end
      )
@@ -130,7 +130,7 @@ defmodule ElixirAiWeb.AiProvidersLive do
                  "name" => "",
                  "model_name" => "",
                  "api_token" => "",
-                 "completions_url" => "https://api.openai.com/v1/chat/completions"
+                 "completions_url" => ""
                }
              )
              |> assign(error: nil)}

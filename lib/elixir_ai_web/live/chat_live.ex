@@ -24,7 +24,6 @@ defmodule ElixirAiWeb.ChatLive do
       {:ok, _pid} ->
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
-          Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
         end
 
         conversation = ChatRunner.get_conversation(name)

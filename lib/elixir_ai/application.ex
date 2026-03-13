@@ -29,7 +29,7 @@ defmodule ElixirAi.Application do
          delta_crdt_options: [sync_interval: 100],
          process_redistribution: :active
        ]},
-      ElixirAi.ClusterSingleton
+      cluster_singleton_child_spec()
     ]
 
     opts = [strategy: :one_for_one, name: ElixirAi.Supervisor]
@@ -56,6 +56,14 @@ defmodule ElixirAi.Application do
       Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_default_provider)
     else
       {Task, fn -> ElixirAi.AiProvider.ensure_default_provider() end}
+    end
+  end
+
+  defp cluster_singleton_child_spec do
+    if Application.get_env(:elixir_ai, :env) == :test do
+      Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_cluster_singleton)
+    else
+      ElixirAi.ClusterSingleton
     end
   end
 end

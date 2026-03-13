@@ -1,6 +1,6 @@
 defmodule ElixirAiWeb.ChatLiveTest do
   use ElixirAiWeb.ConnCase, async: false
-  import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1]
+  import ElixirAi.PubsubTopics, only: [chat_topic: 1]
 
   setup do
     stub(ElixirAi.ConversationManager, :open_conversation, fn _name -> {:ok, self()} end)
@@ -17,7 +17,7 @@ defmodule ElixirAiWeb.ChatLiveTest do
 
     Phoenix.PubSub.broadcast(
       ElixirAi.PubSub,
-      conversation_message_topic("test_conv"),
+      chat_topic("test_conv"),
       {:db_error, "unique constraint violated"}
     )
 
