@@ -34,40 +34,26 @@ defmodule ElixirAi.Conversation do
 
   def all_names do
     sql = """
-    SELECT c.name, p.name, p.model_name, p.api_token, p.completions_url
+    SELECT c.name,
+      json_build_object(
+        'name', p.name,
+        'model_name', p.model_name,
+        'api_token', p.api_token,
+        'completions_url', p.completions_url
+      ) as provider
     FROM conversations c
     LEFT JOIN ai_providers p ON c.ai_provider_id = p.id
     """
 
     params = %{}
 
-    case DbHelpers.run_sql(sql, params, "conversations") do
-      {:error, :db_error} ->
+    case DbHelpers.run_sql(sql, params, "conversations", ConversationInfo.schema()) do
+      {:error, _} ->
         []
 
-      result ->
-        Enum.map(result.rows, fn [name, provider_name, model_name, api_token, completions_url] ->
-          attrs = %{
-            name: name,
-            provider: %{
-              name: provider_name,
-              model_name: model_name,
-              api_token: api_token,
-              completions_url: completions_url
-            }
-          }
-
-          case Zoi.parse(ConversationInfo.schema(), attrs) do
-            {:ok, valid} ->
-              struct(
-                ConversationInfo,
-                Map.put(valid, :provider, struct(Provider, valid.provider))
-              )
-
-            {:error, errors} ->
-              Logger.error("Invalid conversation data: #{inspect(errors)}")
-              raise ArgumentError, "Invalid conversation data: #{inspect(errors)}"
-          end
+      rows ->
+        Enum.map(rows, fn row ->
+          struct(ConversationInfo, Map.put(row, :provider, struct(Provider, row.provider)))
         end)
     end
   end
@@ -76,8 +62,17 @@ defmodule ElixirAi.Conversation do
     case Ecto.UUID.dump(ai_provider_id) do
       {:ok, binary_id} ->
         sql = """
-        INSERT INTO conversations (name, ai_provider_id, inserted_at, updated_at)
-        VALUES ($(name), $(ai_provider_id), $(inserted_at), $(updated_at))
+        INSERT INTO conversations (
+          name,
+          ai_provider_id,
+          inserted_at,
+          updated_at)
+        VALUES (
+          $(name),
+          $(ai_provider_id),
+          $(inserted_at),
+          $(updated_at)
+        )
         """
 
         timestamp = now()
@@ -110,11 +105,11 @@ defmodule ElixirAi.Conversation do
       {:error, :db_error} ->
         {:error, :db_error}
 
-      %{rows: []} ->
+      [] ->
         {:error, :not_found}
 
-      %{rows: [[id] | _]} ->
-        {:ok, id}
+      [row | _] ->
+        {:ok, row["id"]}
     end
   end
 

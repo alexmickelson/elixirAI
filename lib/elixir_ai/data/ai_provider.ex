@@ -28,44 +28,44 @@ defmodule ElixirAi.AiProvider do
     sql = "SELECT id, name, model_name FROM ai_providers"
     params = %{}
 
-    case DbHelpers.run_sql(sql, params, "ai_providers") do
-      {:error, :db_error} ->
+    case DbHelpers.run_sql(sql, params, "ai_providers", AiProviderSchema.partial_schema()) do
+      {:error, _} ->
         []
 
-      result ->
-        results =
-          Enum.map(result.rows, fn [id, name, model_name] ->
-            attrs = %{id: id, name: name, model_name: model_name} |> convert_id_to_string()
-
-            case Zoi.parse(AiProviderSchema.partial_schema(), attrs) do
-              {:ok, valid} ->
-                struct(AiProviderSchema, valid)
-
-              {:error, errors} ->
-                Logger.error("Invalid provider data from DB: #{inspect(errors)}")
-                raise ArgumentError, "Invalid provider data: #{inspect(errors)}"
-            end
-          end)
-
-        Logger.debug("AiProvider.all() returning: #{inspect(results)}")
-
-        results
+      rows ->
+        rows
+        |> Enum.map(fn row ->
+          row |> convert_uuid_to_string() |> then(&struct(AiProviderSchema, &1))
+        end)
+        |> tap(&Logger.debug("AiProvider.all() returning: #{inspect(&1)}"))
     end
   end
 
-  # Convert binary UUID to string for frontend
-  defp convert_id_to_string(%{id: id} = provider) when is_binary(id) do
+  defp convert_uuid_to_string(%{id: id} = provider) when is_binary(id) do
     %{provider | id: Ecto.UUID.cast!(id)}
   end
 
-  defp convert_id_to_string(provider), do: provider
+  defp convert_uuid_to_string(provider), do: provider
 
   def create(attrs) do
     now = DateTime.truncate(DateTime.utc_now(), :second)
 
     sql = """
-    INSERT INTO ai_providers (name, model_name, api_token, completions_url, inserted_at, updated_at)
-    VALUES ($(name), $(model_name), $(api_token), $(completions_url), $(inserted_at), $(updated_at))
+    INSERT INTO ai_providers (
+      name,
+      model_name,
+      api_token,
+      completions_url,
+      inserted_at,
+      updated_at
+    ) VALUES (
+      $(name),
+      $(model_name),
+      $(api_token),
+      $(completions_url),
+      $(inserted_at),
+      $(updated_at)
+    )
     """
 
     params = %{
@@ -102,32 +102,10 @@ defmodule ElixirAi.AiProvider do
 
     params = %{"name" => name}
 
-    case DbHelpers.run_sql(sql, params, "ai_providers") do
-      {:error, :db_error} ->
-        {:error, :db_error}
-
-      %{rows: []} ->
-        {:error, :not_found}
-
-      %{rows: [[id, name, model_name, api_token, completions_url] | _]} ->
-        attrs =
-          %{
-            id: id,
-            name: name,
-            model_name: model_name,
-            api_token: api_token,
-            completions_url: completions_url
-          }
-          |> convert_id_to_string()
-
-        case Zoi.parse(AiProviderSchema.schema(), attrs) do
-          {:ok, valid} ->
-            {:ok, struct(AiProviderSchema, valid)}
-
-          {:error, errors} ->
-            Logger.error("Invalid provider data from DB: #{inspect(errors)}")
-            {:error, :invalid_data}
-        end
+    case DbHelpers.run_sql(sql, params, "ai_providers", AiProviderSchema.schema()) do
+      {:error, _} -> {:error, :db_error}
+      [] -> {:error, :not_found}
+      [row | _] -> {:ok, row |> convert_uuid_to_string() |> then(&struct(AiProviderSchema, &1))}
     end
   end
 
@@ -139,9 +117,9 @@ defmodule ElixirAi.AiProvider do
       {:error, :db_error} ->
         {:error, :db_error}
 
-      result ->
-        case result.rows do
-          [[0]] ->
+      rows ->
+        case rows do
+          [%{"count" => 0}] ->
             attrs = %{
               name: "default",
               model_name: Application.fetch_env!(:elixir_ai, :ai_model),

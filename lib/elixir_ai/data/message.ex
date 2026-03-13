@@ -31,17 +31,9 @@ defmodule ElixirAi.Message do
       {:error, :db_error} ->
         []
 
-      result ->
-        Enum.map(result.rows, fn row ->
-          raw = %{
-            role: Enum.at(row, 0),
-            content: Enum.at(row, 1),
-            reasoning_content: Enum.at(row, 2),
-            tool_calls: Enum.at(row, 3),
-            tool_call_id: Enum.at(row, 4)
-          }
-
-          decoded = decode_message(raw)
+      rows ->
+        Enum.map(rows, fn row ->
+          decoded = decode_message(row)
 
           case Zoi.parse(MessageSchema.schema(), decoded) do
             {:ok, _valid} ->
@@ -69,9 +61,22 @@ defmodule ElixirAi.Message do
       when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
     sql = """
     INSERT INTO messages (
-      conversation_id, role, content, reasoning_content,
-      tool_calls, tool_call_id, inserted_at
-    ) VALUES ($(conversation_id), $(role), $(content), $(reasoning_content), $(tool_calls), $(tool_call_id), $(inserted_at))
+      conversation_id,
+      role,
+      content,
+      reasoning_content,
+      tool_calls,
+      tool_call_id,
+      inserted_at
+    ) VALUES (
+      $(conversation_id),
+      $(role),
+      $(content),
+      $(reasoning_content),
+      $(tool_calls),
+      $(tool_call_id),
+      $(inserted_at)
+    )
     """
 
     params = %{
@@ -114,6 +119,7 @@ defmodule ElixirAi.Message do
 
   defp decode_message(row) do
     row
+    |> Map.new(fn {k, v} -> {String.to_existing_atom(k), v} end)
     |> Map.update!(:role, &String.to_existing_atom/1)
     |> Map.update(:tool_calls, nil, fn
       nil ->
