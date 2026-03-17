@@ -29,8 +29,39 @@ defmodule ElixirAi.MessageStorageTest do
         String.contains?(sql, "SELECT id FROM conversations") ->
           [%{"id" => conv_id}]
 
+        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM messages m") and
+            String.contains?(sql, "LEFT JOIN assistant_message_details") ->
+          # Load messages query
+          []
+
+        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM tool_calls") ->
+          # Load tool calls query
+          []
+
+        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM tool_responses") ->
+          # Load tool responses query
+          []
+
+        String.contains?(sql, "INSERT INTO messages") and String.contains?(sql, "RETURNING id") ->
+          # Assistant message insert - return a fake message_id
+          send(test_pid, {:insert_assistant_message, params})
+          [%{"id" => 123}]
+
         String.contains?(sql, "INSERT INTO messages") ->
+          # User message insert
           send(test_pid, {:insert_message, params})
+          []
+
+        String.contains?(sql, "INSERT INTO tool_calls") ->
+          send(test_pid, {:insert_tool_call, params})
+          []
+
+        String.contains?(sql, "INSERT INTO tool_responses") ->
+          send(test_pid, {:insert_tool_response, params})
+          []
+
+        String.contains?(sql, "INSERT INTO assistant_message_details") ->
+          send(test_pid, {:insert_assistant_details, params})
           []
 
         true ->
@@ -74,7 +105,7 @@ defmodule ElixirAi.MessageStorageTest do
     ElixirAi.ChatRunner.new_user_message(conv_name, "hi")
 
     assert_receive {:insert_message, %{"role" => "user"}}, 2000
-    assert_receive {:insert_message, params}, 2000
+    assert_receive {:insert_assistant_message, params}, 2000
     assert params["role"] == "assistant"
     assert params["content"] == "Hello from AI"
   end
@@ -104,14 +135,17 @@ defmodule ElixirAi.MessageStorageTest do
 
     assert_receive {:insert_message, %{"role" => "user"}}, 2000
 
-    # Assistant message that carries the tool_calls list
-    assert_receive {:insert_message, params}, 2000
+    # Assistant message with tool_calls
+    assert_receive {:insert_assistant_message, params}, 2000
     assert params["role"] == "assistant"
-    refute is_nil(params["tool_calls"])
 
-    # Tool result message
-    assert_receive {:insert_message, params}, 2000
-    assert params["role"] == "tool"
+    # Tool call details stored separately
+    assert_receive {:insert_tool_call, params}, 2000
+    assert params["tool_name"] == "store_thing"
+    assert params["tool_call_id"] == "tc_1"
+
+    # Tool result stored in tool_responses table
+    assert_receive {:insert_tool_response, params}, 2000
     assert params["tool_call_id"] == "tc_1"
   end
 end

@@ -199,7 +199,12 @@ defmodule ElixirAiWeb.ChatMessage do
     """
   end
 
-  # Dispatches to the appropriate tool call component based on result state
+  # Dispatches to the appropriate tool call component based on result state.
+  # Four states:
+  #   :error key present  → error (runtime failure)
+  #   :result key present → success (runtime completed)
+  #   :index key present  → pending (streaming in-progress)
+  #   none of the above   → called (DB-loaded completed call; result is a separate message)
   attr :tool_call, :map, required: true
 
   defp tool_call_item(%{tool_call: tool_call} = assigns) do
@@ -208,7 +213,7 @@ defmodule ElixirAiWeb.ChatMessage do
         assigns =
           assigns
           |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments] || "")
+          |> assign(:arguments, tool_call[:arguments])
           |> assign(:error, tool_call.error)
 
         ~H"<.error_tool_call name={@name} arguments={@arguments} error={@error} />"
@@ -217,23 +222,61 @@ defmodule ElixirAiWeb.ChatMessage do
         assigns =
           assigns
           |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments] || "")
+          |> assign(:arguments, tool_call[:arguments])
           |> assign(:result, tool_call.result)
 
         ~H"<.success_tool_call name={@name} arguments={@arguments} result={@result} />"
+
+      Map.has_key?(tool_call, :index) ->
+        assigns =
+          assigns
+          |> assign(:name, tool_call.name)
+          |> assign(:arguments, tool_call[:arguments])
+
+        ~H"<.pending_tool_call name={@name} arguments={@arguments} />"
 
       true ->
         assigns =
           assigns
           |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments] || "")
+          |> assign(:arguments, tool_call[:arguments])
 
-        ~H"<.pending_tool_call name={@name} arguments={@arguments} />"
+        ~H"<.called_tool_call name={@name} arguments={@arguments} />"
     end
   end
 
   attr :name, :string, required: true
-  attr :arguments, :string, default: ""
+  attr :arguments, :any, default: nil
+
+  defp called_tool_call(assigns) do
+    ~H"""
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900/60 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900/60 bg-cyan-900/20 text-cyan-400">
+        <.tool_call_icon />
+        <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
+        <span class="flex items-center gap-1 text-cyan-500/50">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <span class="text-[10px]">called</span>
+        </span>
+      </div>
+      <.tool_call_args arguments={@arguments} />
+    </div>
+    """
+  end
+
+  attr :name, :string, required: true
+  attr :arguments, :any, default: nil
 
   defp pending_tool_call(assigns) do
     ~H"""
@@ -252,7 +295,7 @@ defmodule ElixirAiWeb.ChatMessage do
   end
 
   attr :name, :string, required: true
-  attr :arguments, :string, default: ""
+  attr :arguments, :any, default: nil
   attr :result, :any, required: true
 
   defp success_tool_call(assigns) do
@@ -297,7 +340,7 @@ defmodule ElixirAiWeb.ChatMessage do
   end
 
   attr :name, :string, required: true
-  attr :arguments, :string, default: ""
+  attr :arguments, :any, default: nil
   attr :error, :string, required: true
 
   defp error_tool_call(assigns) do
@@ -327,16 +370,22 @@ defmodule ElixirAiWeb.ChatMessage do
     """
   end
 
-  attr :arguments, :string, default: ""
+  attr :arguments, :any, default: nil
 
-  defp tool_call_args(%{arguments: args} = assigns) when args != "" do
+  defp tool_call_args(%{arguments: args} = assigns) when not is_nil(args) and args != "" do
     assigns =
       assign(
         assigns,
         :pretty_args,
-        case Jason.decode(args) do
-          {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-          _ -> args
+        case args do
+          s when is_binary(s) ->
+            case Jason.decode(s) do
+              {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
+              _ -> s
+            end
+
+          other ->
+            Jason.encode!(other, pretty: true)
         end
       )
 

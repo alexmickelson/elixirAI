@@ -39,6 +39,18 @@ defmodule ElixirAiWeb.ChatLive do
 
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
+
+      {:error, reason} ->
+        Logger.error("Failed to start conversation #{name}: #{inspect(reason)}")
+
+        {:ok,
+         socket
+         |> assign(conversation_name: name)
+         |> assign(user_input: "")
+         |> assign(messages: [])
+         |> assign(streaming_response: nil)
+         |> assign(background_color: "bg-cyan-950/30")
+         |> assign(db_error: Exception.format(:error, reason))}
     end
   end
 
@@ -67,14 +79,17 @@ defmodule ElixirAiWeb.ChatLive do
         <%= for msg <- @messages do %>
           <%= cond do %>
             <% msg.role == :user -> %>
-              <.user_message content={msg.content} />
+              <.user_message content={Map.get(msg, :content) || ""} />
             <% msg.role == :tool -> %>
-              <.tool_result_message content={msg.content} tool_call_id={msg.tool_call_id} />
+              <.tool_result_message
+                content={Map.get(msg, :content) || ""}
+                tool_call_id={Map.get(msg, :tool_call_id) || ""}
+              />
             <% true -> %>
               <.assistant_message
-                content={msg.content}
-                reasoning_content={msg.reasoning_content}
-                tool_calls={Map.get(msg, :tool_calls, [])}
+                content={Map.get(msg, :content) || ""}
+                reasoning_content={Map.get(msg, :reasoning_content)}
+                tool_calls={Map.get(msg, :tool_calls) || []}
               />
           <% end %>
         <% end %>

@@ -100,6 +100,11 @@ defmodule ElixirAi.ConversationManager do
     {:noreply, state}
   end
 
+  def handle_info({:sql_result_validation_error, error}, state) do
+    Logger.error("ConversationManager received sql_result_validation_error: #{inspect(error)}")
+    {:noreply, state}
+  end
+
   def handle_info({:store_message, name, message}, %{conversations: conversations} = state) do
     case Conversation.find_id(name) do
       {:ok, conv_id} ->

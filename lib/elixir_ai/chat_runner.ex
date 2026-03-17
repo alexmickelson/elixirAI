@@ -329,6 +329,12 @@ defmodule ElixirAi.ChatRunner do
     {:noreply, state}
   end
 
+  def handle_info({:sql_result_validation_error, error}, state) do
+    Logger.error("ChatRunner received sql_result_validation_error: #{inspect(error)}")
+    broadcast_ui(state.name, {:db_error, "Schema validation error: #{inspect(error)}"})
+    {:noreply, state}
+  end
+
   def handle_info({:store_message, _name, _message}, state) do
     {:noreply, state}
   end
