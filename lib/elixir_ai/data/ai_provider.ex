@@ -29,7 +29,7 @@ defmodule ElixirAi.AiProvider do
     sql = "SELECT id, name, model_name FROM ai_providers"
     params = %{}
 
-    case DbHelpers.run_sql(sql, params, "ai_providers", AiProviderSchema.partial_schema()) do
+    case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.partial_schema()) do
       {:error, _} ->
         []
 
@@ -83,6 +83,10 @@ defmodule ElixirAi.AiProvider do
         {:error, :db_error}
 
       _result ->
+        Logger.info(
+          "Provider created, broadcasting :provider_added message to topic #{providers_topic()}"
+        )
+
         Phoenix.PubSub.broadcast(
           ElixirAi.PubSub,
           providers_topic(),
@@ -107,6 +111,29 @@ defmodule ElixirAi.AiProvider do
       {:error, _} -> {:error, :db_error}
       [] -> {:error, :not_found}
       [row | _] -> {:ok, row |> convert_uuid_to_string() |> then(&struct(AiProviderSchema, &1))}
+    end
+  end
+
+  def delete(id) do
+    sql = "DELETE FROM ai_providers WHERE id = $(id)::uuid"
+    params = %{"id" => id}
+
+    case DbHelpers.run_sql(sql, params, providers_topic()) do
+      {:error, :db_error} ->
+        {:error, :db_error}
+
+      _result ->
+        Logger.info(
+          "Provider deleted, broadcasting :provider_deleted message to topic #{providers_topic()}"
+        )
+
+        Phoenix.PubSub.broadcast(
+          ElixirAi.PubSub,
+          providers_topic(),
+          {:provider_deleted, id}
+        )
+
+        :ok
     end
   end
 

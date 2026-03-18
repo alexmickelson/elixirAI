@@ -32,4 +32,25 @@ defmodule ElixirAiWeb.FormComponents do
     </div>
     """
   end
+
+  @doc """
+  Renders a centered overlay modal. Pass content via the `:inner_block` slot.
+
+  ## Examples
+
+      <.modal>
+        <p>Are you sure?</p>
+      </.modal>
+  """
+  slot :inner_block, required: true
+
+  def modal(assigns) do
+    ~H"""
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div class="w-full max-w-sm rounded-lg border border-cyan-900/40 bg-cyan-950 p-6 shadow-xl">
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
 end

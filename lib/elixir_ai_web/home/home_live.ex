@@ -33,6 +33,14 @@ defmodule ElixirAiWeb.HomeLive do
           <p class="mt-2 text-sm text-red-400">{@error}</p>
         <% end %>
       </div>
+
+      <div>
+        <.live_component
+          module={ElixirAiWeb.AiProvidersLive}
+          id="ai-providers"
+          providers={@ai_providers}
+        />
+      </div>
     </div>
     """
   end
@@ -128,6 +136,10 @@ defmodule ElixirAiWeb.HomeLive do
   end
 
   def handle_info({:provider_added, _attrs}, socket) do
+    {:noreply, assign(socket, ai_providers: AiProvider.all())}
+  end
+
+  def handle_info({:provider_deleted, _id}, socket) do
     {:noreply, assign(socket, ai_providers: AiProvider.all())}
   end
 end
