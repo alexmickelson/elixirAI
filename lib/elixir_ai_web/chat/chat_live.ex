@@ -3,21 +3,10 @@ defmodule ElixirAiWeb.ChatLive do
   require Logger
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
+  import ElixirAiWeb.ChatProviderDisplay
   alias ElixirAi.ChatRunner
   alias ElixirAi.ConversationManager
   import ElixirAi.PubsubTopics
-
-  def valid_background_colors do
-    [
-      "bg-cyan-950/30",
-      "bg-red-950/30",
-      "bg-green-950/30",
-      "bg-blue-950/30",
-      "bg-yellow-950/30",
-      "bg-purple-950/30",
-      "bg-pink-950/30"
-    ]
-  end
 
   def mount(%{"name" => name}, _session, socket) do
     case ConversationManager.open_conversation(name) do
@@ -35,6 +24,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(messages: conversation.messages)
          |> assign(streaming_response: conversation.streaming_response)
          |> assign(background_color: "bg-cyan-950/30")
+         |> assign(provider: conversation.provider)
          |> assign(db_error: nil)}
 
       {:error, :not_found} ->
@@ -50,6 +40,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(messages: [])
          |> assign(streaming_response: nil)
          |> assign(background_color: "bg-cyan-950/30")
+         |> assign(provider: nil)
          |> assign(db_error: Exception.format(:error, reason))}
     end
   end
@@ -61,7 +52,8 @@ defmodule ElixirAiWeb.ChatLive do
         <.link navigate={~p"/"} class="text-cyan-700 hover:text-cyan-400 transition-colors">
           ←
         </.link>
-        {@conversation_name}
+        <span class="flex-1">{@conversation_name}</span>
+        <.chat_provider_display provider={@provider} />
       </div>
       <%= if @db_error do %>
         <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">

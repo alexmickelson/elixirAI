@@ -95,7 +95,15 @@ defmodule ElixirAi.ChatRunner do
           "properties" => %{
             "color" => %{
               "type" => "string",
-              "enum" => ElixirAiWeb.ChatLive.valid_background_colors()
+              "enum" => [
+                "bg-cyan-950/30",
+                "bg-red-950/30",
+                "bg-green-950/30",
+                "bg-blue-950/30",
+                "bg-yellow-950/30",
+                "bg-purple-950/30",
+                "bg-pink-950/30"
+              ]
             }
           },
           "required" => ["color"]
