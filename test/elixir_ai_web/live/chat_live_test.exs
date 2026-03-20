@@ -3,10 +3,8 @@ defmodule ElixirAiWeb.ChatLiveTest do
   import ElixirAi.PubsubTopics, only: [chat_topic: 1]
 
   setup do
-    stub(ElixirAi.ConversationManager, :open_conversation, fn _name -> {:ok, self()} end)
-
-    stub(ElixirAi.ChatRunner, :get_conversation, fn _name ->
-      %{messages: [], streaming_response: nil}
+    stub(ElixirAi.ConversationManager, :open_conversation, fn _name ->
+      {:ok, %{messages: [], streaming_response: nil, provider: nil}}
     end)
 
     :ok

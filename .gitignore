@@ -39,3 +39,5 @@ elixir_ls/
 .env
 
 *.tmp
+
+providers.yml

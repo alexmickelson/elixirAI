@@ -27,9 +27,16 @@ defmodule ElixirAi.ChatUtils do
     }
 
     run_function = fn current_message_id, tool_call_id, args ->
-      Task.start(fn ->
-        result = function.(args)
-        send(server, {:tool_response, current_message_id, tool_call_id, result})
+      Task.start_link(fn ->
+        try do
+          result = function.(args)
+          send(server, {:tool_response, current_message_id, tool_call_id, result})
+        rescue
+          e ->
+            reason = Exception.format(:error, e, __STACKTRACE__)
+            Logger.error("Tool task crashed: #{reason}")
+            send(server, {:tool_response, current_message_id, tool_call_id, {:error, reason}})
+        end
       end)
     end
 
@@ -41,7 +48,7 @@ defmodule ElixirAi.ChatUtils do
   end
 
   def request_ai_response(server, messages, tools, provider) do
-    Task.start(fn ->
+    Task.start_link(fn ->
       api_url = provider.completions_url
       api_key = provider.api_token
       model = provider.model_name
@@ -82,7 +89,8 @@ defmodule ElixirAi.ChatUtils do
           :ok
 
         {:error, reason} ->
-          IO.warn("AI request failed: #{inspect(reason)} for #{api_url}")
+          Logger.warning("AI request failed: #{inspect(reason)} for #{api_url}")
+          send(server, {:ai_request_error, reason})
       end
     end)
   end

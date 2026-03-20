@@ -10,12 +10,11 @@ defmodule ElixirAiWeb.ChatLive do
 
   def mount(%{"name" => name}, _session, socket) do
     case ConversationManager.open_conversation(name) do
-      {:ok, _pid} ->
+      {:ok, conversation} ->
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
+          :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
         end
-
-        conversation = ChatRunner.get_conversation(name)
 
         {:ok,
          socket
@@ -25,7 +24,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(streaming_response: conversation.streaming_response)
          |> assign(background_color: "bg-cyan-950/30")
          |> assign(provider: conversation.provider)
-         |> assign(db_error: nil)}
+         |> assign(db_error: nil)
+         |> assign(ai_error: nil)}
 
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
@@ -41,7 +41,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(streaming_response: nil)
          |> assign(background_color: "bg-cyan-950/30")
          |> assign(provider: nil)
-         |> assign(db_error: Exception.format(:error, reason))}
+         |> assign(db_error: Exception.format(:error, reason))
+         |> assign(ai_error: nil)}
     end
   end
 
@@ -58,6 +59,11 @@ defmodule ElixirAiWeb.ChatLive do
       <%= if @db_error do %>
         <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
           Database error: {@db_error}
+        </div>
+      <% end %>
+      <%= if @ai_error do %>
+        <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
+          AI error: {@ai_error}
         </div>
       <% end %>
       <div
@@ -116,6 +122,10 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
     ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
     {:noreply, assign(socket, user_input: "")}
+  end
+
+  def handle_info(:recovery_restart, socket) do
+    {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
   end
 
   def handle_info({:user_chat_message, message}, socket) do
@@ -208,6 +218,16 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_info({:db_error, reason}, socket) do
     {:noreply, assign(socket, db_error: reason)}
+  end
+
+  def handle_info({:ai_request_error, reason}, socket) do
+    error_message =
+      case reason do
+        %{__struct__: mod, reason: r} -> "#{inspect(mod)}: #{inspect(r)}"
+        _ -> inspect(reason)
+      end
+
+    {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}
   end
 
   def handle_info({:set_background_color, color}, socket) do

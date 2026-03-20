@@ -21,7 +21,7 @@ defmodule ElixirAi.ConversationManager do
   def init(_) do
     Logger.info("ConversationManager initializing...")
     send(self(), :load_conversations)
-    {:ok, %{conversations: :loading, subscriptions: MapSet.new()}}
+    {:ok, %{conversations: :loading, subscriptions: MapSet.new(), runners: %{}}}
   end
 
   def create_conversation(name, ai_provider_id) do
@@ -38,6 +38,10 @@ defmodule ElixirAi.ConversationManager do
 
   def get_messages(name) do
     GenServer.call(@name, {:get_messages, name})
+  end
+
+  def list_runners do
+    GenServer.call(@name, :list_runners)
   end
 
   def handle_call(message, from, %{conversations: :loading} = state) do
@@ -75,7 +79,7 @@ defmodule ElixirAi.ConversationManager do
         %{conversations: conversations} = state
       ) do
     if Map.has_key?(conversations, name) do
-      reply_with_started(name, state)
+      reply_with_conversation(name, state)
     else
       {:reply, {:error, :not_found}, state}
     end
@@ -84,15 +88,24 @@ defmodule ElixirAi.ConversationManager do
   def handle_call(:list, _from, %{conversations: conversations} = state) do
     keys = Map.keys(conversations)
 
-    Logger.debug(
-      "list_conversations returning: #{inspect(keys, limit: :infinity, printable_limit: :infinity, binaries: :as_binaries)}"
-    )
-
     {:reply, keys, state}
   end
 
   def handle_call({:get_messages, name}, _from, %{conversations: conversations} = state) do
     {:reply, Map.get(conversations, name, []), state}
+  end
+
+  def handle_call(:list_runners, _from, state) do
+    {:reply, Map.get(state, :runners, %{}), state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, reason}, %{runners: runners} = state) do
+    runners =
+      Enum.reject(runners, fn {_name, info} -> info.pid == pid end)
+      |> Map.new()
+
+    Logger.info("ConversationManager: runner #{inspect(pid)} went down (#{inspect(reason)})")
+    {:noreply, %{state | runners: runners}}
   end
 
   def handle_info({:db_error, reason}, state) do
@@ -138,10 +151,13 @@ defmodule ElixirAi.ConversationManager do
     end
   end
 
+  # Returns {pid} to callers that only need to know the process started (e.g. create).
   defp reply_with_started(name, state, update_state \\ fn s -> s end) do
-    case start_and_subscribe(name, state.subscriptions) do
-      {:ok, pid, new_subscriptions} ->
-        new_state = update_state.(%{state | subscriptions: new_subscriptions})
+    case start_and_subscribe(name, state) do
+      {:ok, pid, new_subscriptions, new_runners} ->
+        new_state =
+          update_state.(%{state | subscriptions: new_subscriptions, runners: new_runners})
+
         {:reply, {:ok, pid}, new_state}
 
       {:error, _reason} = error ->
@@ -149,7 +165,21 @@ defmodule ElixirAi.ConversationManager do
     end
   end
 
-  defp start_and_subscribe(name, subscriptions) do
+  # Returns the full conversation state using the pid directly, bypassing the
+  # Horde registry (which may not have synced yet on the calling node).
+  defp reply_with_conversation(name, state) do
+    case start_and_subscribe(name, state) do
+      {:ok, pid, new_subscriptions, new_runners} ->
+        new_state = %{state | subscriptions: new_subscriptions, runners: new_runners}
+        conversation = GenServer.call(pid, :get_conversation)
+        {:reply, {:ok, conversation}, new_state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  defp start_and_subscribe(name, state) do
     result =
       case Horde.DynamicSupervisor.start_child(
              ElixirAi.ChatRunnerSupervisor,
@@ -163,14 +193,24 @@ defmodule ElixirAi.ConversationManager do
     case result do
       {:ok, pid} ->
         new_subscriptions =
-          if MapSet.member?(subscriptions, name) do
-            subscriptions
+          if MapSet.member?(state.subscriptions, name) do
+            state.subscriptions
           else
             Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
-            MapSet.put(subscriptions, name)
+            MapSet.put(state.subscriptions, name)
           end
 
-        {:ok, pid, new_subscriptions}
+        existing_runners = Map.get(state, :runners, %{})
+
+        new_runners =
+          if Map.has_key?(existing_runners, name) do
+            existing_runners
+          else
+            Process.monitor(pid)
+            Map.put(existing_runners, name, %{pid: pid, node: node(pid)})
+          end
+
+        {:ok, pid, new_subscriptions, new_runners}
 
       error ->
         error

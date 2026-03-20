@@ -31,6 +31,7 @@ services:
       RELEASE_NODE: elixir_ai@node1
       RELEASE_COOKIE: secret_cluster_cookie
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
+      PROVIDERS_CONFIG_PATH: /app/providers.yml
     user: root
     command: |
       sh -c '
@@ -41,6 +42,7 @@ services:
     volumes:
       - .:/app
       - /app/_build
+      - ./providers.yml:/app/providers.yml:ro
     ports:
       - "4001:4000"
     depends_on:
@@ -68,6 +70,7 @@ services:
       RELEASE_NODE: elixir_ai@node2
       RELEASE_COOKIE: secret_cluster_cookie
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
+      PROVIDERS_CONFIG_PATH: /app/providers.yml
     user: root
     command: |
       sh -c '
@@ -78,6 +81,7 @@ services:
     volumes:
       - .:/app
       - /app/_build
+      - ./providers.yml:/app/providers.yml:ro
     ports:
       - "4002:4000"
     depends_on:

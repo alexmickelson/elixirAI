@@ -1,17 +1,10 @@
-# This file is responsible for configuring your application
-# and its dependencies with the aid of the Config module.
-#
-# This configuration file is loaded before any dependency and
-# is restricted to this project.
-
-# General application configuration
+# General config, overriden by other files in this directory.
 import Config
 
 config :elixir_ai,
   ecto_repos: [ElixirAi.Repo],
   generators: [timestamp_type: :utc_datetime]
 
-# Configures the endpoint
 config :elixir_ai, ElixirAiWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
@@ -22,7 +15,6 @@ config :elixir_ai, ElixirAiWeb.Endpoint,
   pubsub_server: ElixirAi.PubSub,
   live_view: [signing_salt: "4UG1IVt+"]
 
-# Configure esbuild (the version is required)
 config :esbuild,
   version: "0.17.11",
   elixir_ai: [
@@ -32,7 +24,6 @@ config :esbuild,
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
-# Configure tailwind (the version is required)
 config :tailwind,
   version: "4.0.9",
   elixir_ai: [
@@ -43,17 +34,12 @@ config :tailwind,
     cd: Path.expand("../assets", __DIR__)
   ]
 
-# Configures Elixir's Logger
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
-# Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
-# Lower the BEAM node-down detection window from the default 60s.
-# Nodes send ticks every (net_ticktime / 4)s; a node is declared down
-# after 4 missed ticks (net_ticktime total). 5s means detection in ≤5s.
 if System.get_env("RELEASE_MODE") do
   config :kernel, net_ticktime: 2
 end
@@ -67,6 +53,4 @@ config :libcluster,
     ]
   ]
 
-# Import environment specific config. This must remain at the bottom
-# of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

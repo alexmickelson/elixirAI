@@ -138,28 +138,80 @@ defmodule ElixirAi.AiProvider do
   end
 
   def ensure_default_provider do
-    sql = "SELECT COUNT(*) FROM ai_providers"
-    params = %{}
+    endpoint = Application.get_env(:elixir_ai, :ai_endpoint)
+    token = Application.get_env(:elixir_ai, :ai_token)
+    model = Application.get_env(:elixir_ai, :ai_model)
 
-    case DbHelpers.run_sql(sql, params, providers_topic()) do
-      {:error, :db_error} ->
-        {:error, :db_error}
+    if endpoint && token && model do
+      case find_by_name("default") do
+        {:error, :not_found} ->
+          attrs = %{
+            name: "default",
+            model_name: model,
+            api_token: token,
+            completions_url: endpoint
+          }
 
-      rows ->
-        case rows do
-          [%{"count" => 0}] ->
-            attrs = %{
-              name: "default",
-              model_name: Application.fetch_env!(:elixir_ai, :ai_model),
-              api_token: Application.fetch_env!(:elixir_ai, :ai_token),
-              completions_url: Application.fetch_env!(:elixir_ai, :ai_endpoint)
-            }
+          create(attrs)
 
-            create(attrs)
+        {:ok, _} ->
+          :ok
 
-          _ ->
-            :ok
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      Logger.info("AI env vars not configured, skipping default provider creation")
+      :ok
+    end
+  end
+
+  def ensure_providers_from_file do
+    case System.get_env("PROVIDERS_CONFIG_PATH") do
+      nil ->
+        :ok
+
+      path ->
+        case YamlElixir.read_from_file(path) do
+          {:ok, %{"providers" => providers}} when is_list(providers) ->
+            Enum.each(providers, &ensure_provider_from_yaml/1)
+
+          {:ok, _} ->
+            Logger.warning("providers.yml: expected a top-level 'providers' list, skipping")
+
+          {:error, reason} ->
+            Logger.warning("Could not read providers config from #{path}: #{inspect(reason)}")
         end
     end
+  end
+
+  def ensure_configured_providers do
+    ensure_default_provider()
+    ensure_providers_from_file()
+  end
+
+  defp ensure_provider_from_yaml(%{
+         "name" => name,
+         "model" => model,
+         "responses_endpoint" => endpoint,
+         "api_key" => api_key
+       }) do
+    case find_by_name(name) do
+      {:error, :not_found} ->
+        Logger.info("Creating provider '#{name}' from providers config file")
+        create(%{name: name, model_name: model, api_token: api_key, completions_url: endpoint})
+
+      {:ok, _} ->
+        Logger.debug("Provider '#{name}' already exists, skipping")
+
+      {:error, reason} ->
+        Logger.warning("Could not check existence of provider '#{name}': #{inspect(reason)}")
+    end
+  end
+
+  defp ensure_provider_from_yaml(entry) do
+    Logger.warning(
+      "Skipping invalid provider entry in providers config file (must have name, model, responses_endpoint, api_key): #{inspect(entry)}"
+    )
   end
 end

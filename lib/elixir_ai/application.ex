@@ -12,6 +12,7 @@ defmodule ElixirAi.Application do
       {Cluster.Supervisor,
        [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
+      {ElixirAi.LiveViewPG, []},
       ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint,
       {Horde.Registry,
@@ -55,7 +56,7 @@ defmodule ElixirAi.Application do
     if Application.get_env(:elixir_ai, :env) == :test do
       Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_default_provider)
     else
-      {Task, fn -> ElixirAi.AiProvider.ensure_default_provider() end}
+      {Task, fn -> ElixirAi.AiProvider.ensure_configured_providers() end}
     end
   end
 

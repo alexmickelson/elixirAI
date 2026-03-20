@@ -49,6 +49,7 @@ defmodule ElixirAi.ChatRunner do
         "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
       )
 
+      broadcast_ui(name, :recovery_restart)
       ElixirAi.ChatUtils.request_ai_response(self(), messages, tools(self(), name), provider)
     end
 

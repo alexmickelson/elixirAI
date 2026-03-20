@@ -8,6 +8,7 @@ defmodule ElixirAiWeb.HomeLive do
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(ElixirAi.PubSub, providers_topic())
+      :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
       send(self(), :load_data)
     end
 

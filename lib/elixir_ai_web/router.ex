@@ -19,6 +19,7 @@ defmodule ElixirAiWeb.Router do
 
     live "/", HomeLive
     live "/chat/:name", ChatLive
+    live "/admin", AdminLive
   end
 
   # Other scopes may use custom stacks.

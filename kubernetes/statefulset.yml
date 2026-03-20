@@ -4,7 +4,7 @@ metadata:
   name: ai-ha-elixir
   namespace: ai-ha-elixir
 spec:
-  serviceName: ai-ha-elixir-headless
+  serviceName: ai-ha-elixir-headless # replica1.ai-ha-elixir-headless.svc.cluster.local
   replicas: 2
   podManagementPolicy: Parallel
   updateStrategy:
