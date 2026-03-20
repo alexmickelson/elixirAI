@@ -76,7 +76,7 @@ Hooks.ScrollBottom = {
     });
     this.observer.observe(this.el, { childList: true, subtree: true });
     this.handleEvent("scroll_to_bottom", () => {
-      this.scrollToBottom();
+      requestAnimationFrame(() => this.scrollToBottom());
     });
   },
   updated() {

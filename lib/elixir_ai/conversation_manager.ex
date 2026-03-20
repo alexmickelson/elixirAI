@@ -167,12 +167,13 @@ defmodule ElixirAi.ConversationManager do
 
   # Returns the full conversation state using the pid directly, bypassing the
   # Horde registry (which may not have synced yet on the calling node).
+  # Also includes the runner pid so the caller can make further direct calls.
   defp reply_with_conversation(name, state) do
     case start_and_subscribe(name, state) do
       {:ok, pid, new_subscriptions, new_runners} ->
         new_state = %{state | subscriptions: new_subscriptions, runners: new_runners}
         conversation = GenServer.call(pid, :get_conversation)
-        {:reply, {:ok, conversation}, new_state}
+        {:reply, {:ok, Map.put(conversation, :runner_pid, pid)}, new_state}
 
       {:error, _reason} = error ->
         {:reply, error, state}

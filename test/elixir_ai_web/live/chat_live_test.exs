@@ -4,7 +4,7 @@ defmodule ElixirAiWeb.ChatLiveTest do
 
   setup do
     stub(ElixirAi.ConversationManager, :open_conversation, fn _name ->
-      {:ok, %{messages: [], streaming_response: nil, provider: nil}}
+      {:ok, %{messages: [], streaming_response: nil, provider: nil, runner_pid: nil}}
     end)
 
     :ok

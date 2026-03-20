@@ -14,11 +14,13 @@ defmodule ElixirAiWeb.ChatLive do
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
+          send(self(), :sync_streaming)
         end
 
         {:ok,
          socket
          |> assign(conversation_name: name)
+         |> assign(runner_pid: Map.get(conversation, :runner_pid))
          |> assign(user_input: "")
          |> assign(messages: conversation.messages)
          |> assign(streaming_response: conversation.streaming_response)
@@ -128,6 +130,35 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
   end
 
+  # Fetches the authoritative streaming snapshot directly from the runner pid,
+  # bypassing the Horde registry. Sent to self immediately after subscribing on
+  # connect so it is the first message processed — before any PubSub chunks.
+  def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
+      when is_pid(pid) do
+    case GenServer.call(pid, :get_streaming_response) do
+      nil ->
+        {:noreply, assign(socket, streaming_response: nil)}
+
+      %{content: content, reasoning_content: reasoning_content} = snapshot ->
+        socket =
+          socket
+          |> assign(streaming_response: snapshot)
+          |> then(fn s ->
+            if content != "", do: push_event(s, "md_chunk", %{chunk: content}), else: s
+          end)
+          |> then(fn s ->
+            if reasoning_content != "",
+              do: push_event(s, "reasoning_chunk", %{chunk: reasoning_content}),
+              else: s
+          end)
+          |> push_event("scroll_to_bottom", %{})
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info(:sync_streaming, socket), do: {:noreply, socket}
+
   def handle_info({:user_chat_message, message}, socket) do
     {:noreply,
      socket
@@ -233,6 +264,13 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_info({:set_background_color, color}, socket) do
     Logger.info("setting background color to #{color}")
     {:noreply, assign(socket, background_color: color)}
+  end
+
+  defp get_snapshot(%{assigns: %{runner_pid: pid}} = _socket) when is_pid(pid) do
+    case GenServer.call(pid, :get_streaming_response) do
+      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
+      snapshot -> snapshot
+    end
   end
 
   defp get_snapshot(socket) do
