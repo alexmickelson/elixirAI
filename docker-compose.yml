@@ -5,6 +5,7 @@ services:
       POSTGRES_USER: elixir_ai
       POSTGRES_PASSWORD: elixir_ai
       POSTGRES_DB: elixir_ai_dev
+      
     command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - ./postgres/schema/:/docker-entrypoint-initdb.d/
@@ -32,6 +33,7 @@ services:
       RELEASE_COOKIE: secret_cluster_cookie
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
+      WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
     user: root
     command: |
       sh -c '
@@ -71,6 +73,7 @@ services:
       RELEASE_COOKIE: secret_cluster_cookie
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
+      WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
     user: root
     command: |
       sh -c '

@@ -6,7 +6,8 @@ source!([".env", System.get_env()])
 config :elixir_ai,
   ai_endpoint: System.get_env("AI_RESPONSES_ENDPOINT"),
   ai_token: System.get_env("AI_TOKEN"),
-  ai_model: System.get_env("AI_MODEL")
+  ai_model: System.get_env("AI_MODEL"),
+  whisper_endpoint: System.get_env("WHISPER_ENDPOINT")
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the

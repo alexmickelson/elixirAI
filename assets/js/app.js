@@ -19,8 +19,11 @@ import "phoenix_html";
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 import topbar from "../vendor/topbar";
+import { VoiceControl } from "./voice_control";
 
 let Hooks = {};
+
+Hooks.VoiceControl = VoiceControl;
 
 // Renders a complete markdown string client-side on mount.
 // The raw markdown is passed as the data-md attribute.

@@ -58,6 +58,10 @@ legend {
   @apply text-sm font-semibold text-cyan-400 px-1;
 }
 
+button {
+  @apply cursor-pointer;
+}
+
 @import "./spinner.css";
 @import "./markdown.css";
 
@@ -68,6 +72,7 @@ legend {
 .reasoning-content.collapsed {
   @apply opacity-0 max-h-0 pt-0 pb-0 mb-0;
 }
+
 
 
 

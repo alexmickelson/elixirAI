@@ -13,6 +13,8 @@ defmodule ElixirAi.Application do
        [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
       {Phoenix.PubSub, name: ElixirAi.PubSub},
       {ElixirAi.LiveViewPG, []},
+      {ElixirAi.AudioProcessingPG, []},
+      {DynamicSupervisor, name: ElixirAi.AudioWorkerSupervisor, strategy: :one_for_one},
       ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint,
       {Horde.Registry,

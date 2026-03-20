@@ -130,9 +130,6 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
   end
 
-  # Fetches the authoritative streaming snapshot directly from the runner pid,
-  # bypassing the Horde registry. Sent to self immediately after subscribing on
-  # connect so it is the first message processed — before any PubSub chunks.
   def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
       when is_pid(pid) do
     case GenServer.call(pid, :get_streaming_response) do
