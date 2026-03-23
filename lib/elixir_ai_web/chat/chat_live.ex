@@ -4,8 +4,7 @@ defmodule ElixirAiWeb.ChatLive do
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
   import ElixirAiWeb.ChatProviderDisplay
-  alias ElixirAi.ChatRunner
-  alias ElixirAi.ConversationManager
+  alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
   import ElixirAi.PubsubTopics
 
   def mount(%{"name" => name}, _session, socket) do
@@ -27,6 +26,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(streaming_response: conversation.streaming_response)
          |> assign(background_color: "bg-cyan-950/30")
          |> assign(provider: conversation.provider)
+         |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
          |> assign(ai_error: nil)}
 
@@ -44,6 +44,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(streaming_response: nil)
          |> assign(background_color: "bg-cyan-950/30")
          |> assign(provider: nil)
+         |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
          |> assign(ai_error: nil)}
     end
@@ -57,7 +58,7 @@ defmodule ElixirAiWeb.ChatLive do
           ←
         </.link>
         <span class="flex-1">{@conversation_name}</span>
-        <.chat_provider_display provider={@provider} />
+        <.chat_provider_display provider={@provider} providers={@providers} />
       </div>
       <%= if @db_error do %>
         <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
@@ -120,6 +121,13 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_event("update_user_input", %{"user_input" => user_input}, socket) do
     {:noreply, assign(socket, user_input: user_input)}
+  end
+
+  def handle_event("change_provider", %{"id" => provider_id}, socket) do
+    case ChatRunner.set_provider(socket.assigns.conversation_name, provider_id) do
+      {:ok, provider} -> {:noreply, assign(socket, provider: provider)}
+      _error -> {:noreply, socket}
+    end
   end
 
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do

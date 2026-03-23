@@ -114,6 +114,34 @@ defmodule ElixirAi.AiProvider do
     end
   end
 
+  def find_by_id(id) do
+    case Ecto.UUID.dump(id) do
+      {:ok, binary_id} ->
+        sql = """
+        SELECT id, name, model_name, api_token, completions_url
+        FROM ai_providers
+        WHERE id = $(id)
+        LIMIT 1
+        """
+
+        params = %{"id" => binary_id}
+
+        case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.schema()) do
+          {:error, _} ->
+            {:error, :db_error}
+
+          [] ->
+            {:error, :not_found}
+
+          [row | _] ->
+            {:ok, row |> convert_uuid_to_string() |> then(&struct(AiProviderSchema, &1))}
+        end
+
+      :error ->
+        {:error, :invalid_uuid}
+    end
+  end
+
   def delete(id) do
     sql = "DELETE FROM ai_providers WHERE id = $(id)::uuid"
     params = %{"id" => id}

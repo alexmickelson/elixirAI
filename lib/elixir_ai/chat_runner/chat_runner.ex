@@ -38,6 +38,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:tool_config, {:set_tool_choice, tool_choice}})
   end
 
+  def set_provider(name, provider_id) when is_binary(provider_id) do
+    GenServer.call(via(name), {:tool_config, {:set_provider, provider_id}})
+  end
+
   def register_liveview_pid(name, liveview_pid) when is_pid(liveview_pid) do
     GenServer.call(via(name), {:session, {:register_liveview_pid, liveview_pid}})
   end

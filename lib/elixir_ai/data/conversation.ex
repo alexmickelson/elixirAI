@@ -173,6 +173,31 @@ defmodule ElixirAi.Conversation do
     end
   end
 
+  def update_provider(name, provider_id) when is_binary(provider_id) do
+    case Ecto.UUID.dump(provider_id) do
+      {:ok, binary_id} ->
+        sql = """
+        UPDATE conversations
+        SET ai_provider_id = $(ai_provider_id), updated_at = $(updated_at)
+        WHERE name = $(name)
+        """
+
+        params = %{
+          "name" => name,
+          "ai_provider_id" => binary_id,
+          "updated_at" => now()
+        }
+
+        case DbHelpers.run_sql(sql, params, "conversations") do
+          {:error, :db_error} -> {:error, :db_error}
+          _ -> :ok
+        end
+
+      :error ->
+        {:error, :invalid_uuid}
+    end
+  end
+
   def find_id(name) do
     sql = "SELECT id FROM conversations WHERE name = $(name) LIMIT 1"
     params = %{"name" => name}
