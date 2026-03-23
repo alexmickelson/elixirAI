@@ -3,10 +3,24 @@
 @source "../js/**/*.js";
 @source "../../lib/elixir_ai_web.ex";
 @source "../../lib/elixir_ai_web/**/*.*ex";
+@source inline("{bg-seafoam-950/30,bg-red-950/30,bg-green-950/30,bg-blue-950/30,bg-yellow-950/30,bg-purple-950/30,bg-pink-950/30}");
 @plugin "@tailwindcss/forms";
 @plugin "../heroicons_plugin.js";
 
 @theme {
+  --color-brand: #fd4f00;
+
+  --color-seafoam-50: #ecfeff;
+  --color-seafoam-100: #cffafe;
+  --color-seafoam-200: #a5f3fc;
+  --color-seafoam-300: #67e8f9;
+  --color-seafoam-400: #22d3ee;
+  --color-seafoam-500: #06b6d4;
+  --color-seafoam-600: #0891b2;
+  --color-seafoam-700: #0e7490;
+  --color-seafoam-800: #155e75;
+  --color-seafoam-900: #164e63;
+  --color-seafoam-950: #083344;
 }
 
 @variant phx-click-loading (&.phx-click-loading, .phx-click-loading &);
@@ -17,7 +31,7 @@
 
 /* Form Elements */
 label {
-  @apply block text-sm font-medium text-cyan-300 mb-1;
+  @apply block text-sm font-medium text-seafoam-300 mb-1;
 }
 
 input[type="text"],
@@ -29,11 +43,11 @@ input[type="url"],
 textarea,
 select {
   @apply w-full rounded-md px-3 py-2 text-sm
-         bg-cyan-950 text-cyan-50 placeholder-cyan-600
-         border border-cyan-800
+         bg-seafoam-950 text-seafoam-50 placeholder-seafoam-600
+         border border-seafoam-800
          outline-none
          transition-colors duration-150
-         focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500;
+         focus:border-seafoam-500 focus:ring-1 focus:ring-seafoam-500;
 }
 
 textarea {
@@ -43,19 +57,19 @@ textarea {
 button[type="submit"],
 input[type="submit"] {
   @apply px-4 py-2 rounded-md text-sm font-medium
-         bg-cyan-600 text-white
-         border border-cyan-500
+         bg-seafoam-600 text-white
+         border border-seafoam-500
          transition-colors duration-150
-         hover:bg-cyan-500
+         hover:bg-seafoam-500
          disabled:opacity-40 disabled:cursor-not-allowed;
 }
 
 fieldset {
-  @apply border border-cyan-800 rounded-md px-4 py-3;
+  @apply border border-seafoam-800 rounded-md px-4 py-3;
 }
 
 legend {
-  @apply text-sm font-semibold text-cyan-400 px-1;
+  @apply text-sm font-semibold text-seafoam-400 px-1;
 }
 
 button {
@@ -72,8 +86,3 @@ button {
 .reasoning-content.collapsed {
   @apply opacity-0 max-h-0 pt-0 pb-0 mb-0;
 }
-
-
-
-
-

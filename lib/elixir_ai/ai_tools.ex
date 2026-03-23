@@ -83,7 +83,7 @@ defmodule ElixirAi.AiTools do
           "color" => %{
             "type" => "string",
             "enum" => [
-              "bg-cyan-950/30",
+              "bg-seafoam-950/30",
               "bg-red-950/30",
               "bg-green-950/30",
               "bg-blue-950/30",

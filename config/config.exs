@@ -25,7 +25,7 @@ config :esbuild,
   ]
 
 config :tailwind,
-  version: "4.0.9",
+  version: "4.2.2",
   elixir_ai: [
     args: ~w(
       --input=css/app.css

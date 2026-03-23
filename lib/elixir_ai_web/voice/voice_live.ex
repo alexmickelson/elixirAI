@@ -14,7 +14,7 @@ defmodule ElixirAiWeb.VoiceLive do
         <button
           phx-click="expand"
           title="Voice input (Ctrl+Space)"
-          class="fixed top-4 right-4 z-50 p-2.5 rounded-full bg-cyan-900/50 hover:bg-cyan-800/80 border border-cyan-700/50 hover:border-cyan-600 text-cyan-500/70 hover:text-cyan-300 transition-all duration-200 opacity-50 hover:opacity-100"
+          class="fixed top-4 right-4 z-50 p-2.5 rounded-full bg-seafoam-900/50 hover:bg-seafoam-800/80 border border-seafoam-700/50 hover:border-seafoam-600 text-seafoam-500/70 hover:text-seafoam-300 transition-all duration-200 opacity-50 hover:opacity-100"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -27,19 +27,19 @@ defmodule ElixirAiWeb.VoiceLive do
         </button>
       <% else %>
         <%!-- Expanded panel --%>
-        <div class="fixed top-4 right-4 w-72 bg-cyan-950/95 border border-cyan-800 rounded-2xl shadow-2xl z-50 p-4 flex flex-col gap-3 backdrop-blur">
+        <div class="fixed top-4 right-4 w-72 bg-seafoam-950/95 border border-seafoam-800 rounded-2xl shadow-2xl z-50 p-4 flex flex-col gap-3 backdrop-blur">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
               <%= if @state == :idle do %>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 text-cyan-500 shrink-0"
+                  class="h-4 w-4 text-seafoam-500 shrink-0"
                   viewBox="0 0 24 24"
                   fill="currentColor"
                 >
                   <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v7a2 2 0 1 0 4 0V5a2 2 0 0 0-2-2zm-7 9a7 7 0 0 0 14 0h2a9 9 0 0 1-8 8.94V23h-2v-2.06A9 9 0 0 1 3 12H5z" />
                 </svg>
-                <span class="text-cyan-400 font-semibold text-sm">Voice Input</span>
+                <span class="text-seafoam-400 font-semibold text-sm">Voice Input</span>
               <% end %>
               <%= if @state == :recording do %>
                 <span class="relative flex h-3 w-3 shrink-0">
@@ -47,25 +47,25 @@ defmodule ElixirAiWeb.VoiceLive do
                   </span>
                   <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
                 </span>
-                <span class="text-cyan-50 font-semibold text-sm">Recording</span>
+                <span class="text-seafoam-50 font-semibold text-sm">Recording</span>
               <% end %>
               <%= if @state == :processing do %>
                 <span class="relative flex h-3 w-3 shrink-0">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-seafoam-400 opacity-75">
                   </span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-cyan-400"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-seafoam-400"></span>
                 </span>
-                <span class="text-cyan-50 font-semibold text-sm">Processing…</span>
+                <span class="text-seafoam-50 font-semibold text-sm">Processing…</span>
               <% end %>
               <%= if @state == :transcribed do %>
-                <span class="text-cyan-300 font-semibold text-sm">Transcription</span>
+                <span class="text-seafoam-300 font-semibold text-sm">Transcription</span>
               <% end %>
             </div>
             <%!-- Minimize button --%>
             <button
               phx-click="minimize"
               title="Minimize"
-              class="p-1 rounded-lg text-cyan-600 hover:text-cyan-300 hover:bg-cyan-800/50 transition-colors"
+              class="p-1 rounded-lg text-seafoam-600 hover:text-seafoam-300 hover:bg-seafoam-800/50 transition-colors"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -83,7 +83,7 @@ defmodule ElixirAiWeb.VoiceLive do
           </div>
           <%= if @state in [:recording, :processing] do %>
             <div id="voice-viz-wrapper" phx-update="ignore">
-              <canvas id="voice-viz-canvas" height="72" class="w-full rounded-lg bg-cyan-950 block">
+              <canvas id="voice-viz-canvas" height="72" class="w-full rounded-lg bg-seafoam-950 block">
               </canvas>
             </div>
           <% end %>
@@ -93,10 +93,10 @@ defmodule ElixirAiWeb.VoiceLive do
           <%= if @state == :idle do %>
             <button
               phx-click={JS.dispatch("voice:start", to: "#voice-control-hook")}
-              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-cyan-50 text-xs font-medium transition-colors"
+              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-seafoam-700 hover:bg-seafoam-600 text-seafoam-50 text-xs font-medium transition-colors"
             >
               <span>Start Recording</span>
-              <kbd class="text-cyan-300 bg-cyan-800 border border-cyan-600 px-1.5 py-0.5 rounded font-mono">
+              <kbd class="text-seafoam-300 bg-seafoam-800 border border-seafoam-600 px-1.5 py-0.5 rounded font-mono">
                 Ctrl+Space
               </kbd>
             </button>
@@ -104,10 +104,10 @@ defmodule ElixirAiWeb.VoiceLive do
           <%= if @state == :recording do %>
             <button
               phx-click={JS.dispatch("voice:stop", to: "#voice-control-hook")}
-              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-cyan-800 hover:bg-cyan-700 text-cyan-50 text-xs font-medium transition-colors border border-cyan-700"
+              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-seafoam-800 hover:bg-seafoam-700 text-seafoam-50 text-xs font-medium transition-colors border border-seafoam-700"
             >
               <span>Stop Recording</span>
-              <kbd class="text-cyan-300 bg-cyan-900 border border-cyan-700 px-1.5 py-0.5 rounded font-mono">
+              <kbd class="text-seafoam-300 bg-seafoam-900 border border-seafoam-700 px-1.5 py-0.5 rounded font-mono">
                 Space
               </kbd>
             </button>
@@ -115,7 +115,7 @@ defmodule ElixirAiWeb.VoiceLive do
           <%= if @state == :transcribed do %>
             <button
               phx-click="dismiss_transcription"
-              class="text-xs text-cyan-500 hover:text-cyan-300 transition-colors text-center w-full"
+              class="text-xs text-seafoam-500 hover:text-seafoam-300 transition-colors text-center w-full"
             >
               Dismiss
             </button>
@@ -128,8 +128,8 @@ defmodule ElixirAiWeb.VoiceLive do
 
   defp transcription_display(assigns) do
     ~H"""
-    <div class="rounded-xl bg-cyan-900/60 border border-cyan-700 px-3 py-2">
-      <p class="text-sm text-cyan-50 leading-relaxed">{@transcription}</p>
+    <div class="rounded-xl bg-seafoam-900/60 border border-seafoam-700 px-3 py-2">
+      <p class="text-sm text-seafoam-50 leading-relaxed">{@transcription}</p>
     </div>
     """
   end

@@ -108,7 +108,7 @@ defmodule ElixirAiWeb.AdminLive do
   def render(assigns) do
     ~H"""
     <div class="p-6 space-y-4">
-      <h1 class="text-lg font-semibold text-cyan-200 tracking-wide">Cluster Admin</h1>
+      <h1 class="text-lg font-semibold text-seafoam-200 tracking-wide">Cluster Admin</h1>
 
       <div class="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
         <%= for {node, status} <- @cluster_info.nodes do %>
@@ -121,12 +121,12 @@ defmodule ElixirAiWeb.AdminLive do
             |> Enum.filter(fn {_, n} -> n == node end)
             |> Enum.group_by(fn {view, _} -> view end) %>
 
-          <div class="rounded-lg border border-cyan-800/50 bg-cyan-950/30 overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-3 bg-cyan-900/40 border-b border-cyan-800/50">
+          <div class="rounded-lg border border-seafoam-800/50 bg-seafoam-950/30 overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 bg-seafoam-900/40 border-b border-seafoam-800/50">
               <div class="flex items-center gap-2">
-                <span class="font-mono text-sm font-semibold text-cyan-200">{node}</span>
+                <span class="font-mono text-sm font-semibold text-seafoam-200">{node}</span>
                 <%= if node == Node.self() do %>
-                  <span class="text-xs bg-cyan-800/50 text-cyan-400 px-1.5 py-0.5 rounded">self</span>
+                  <span class="text-xs bg-seafoam-800/50 text-seafoam-400 px-1.5 py-0.5 rounded">self</span>
                 <% end %>
               </div>
               <.status_badge status={status} />
@@ -135,12 +135,12 @@ defmodule ElixirAiWeb.AdminLive do
             <div class="p-4 space-y-4">
               <%= if node_singletons != [] do %>
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-widest text-cyan-600 mb-1.5">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-seafoam-600 mb-1.5">
                     Singletons
                   </p>
                   <div class="space-y-1">
                     <%= for {module, _} <- node_singletons do %>
-                      <div class="px-2 py-1.5 rounded bg-cyan-900/30 font-mono text-xs text-cyan-300">
+                      <div class="px-2 py-1.5 rounded bg-seafoam-900/30 font-mono text-xs text-seafoam-300">
                         {inspect(module)}
                       </div>
                     <% end %>
@@ -150,15 +150,15 @@ defmodule ElixirAiWeb.AdminLive do
 
               <%= if node_runners != [] do %>
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-widest text-cyan-600 mb-1.5">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-seafoam-600 mb-1.5">
                     Chat Runners
-                    <span class="normal-case font-normal text-cyan-700 ml-1">
+                    <span class="normal-case font-normal text-seafoam-700 ml-1">
                       {length(node_runners)}
                     </span>
                   </p>
                   <div class="space-y-1">
                     <%= for {name, _, _} <- node_runners do %>
-                      <div class="px-2 py-1.5 rounded bg-cyan-900/30 font-mono text-xs text-cyan-200">
+                      <div class="px-2 py-1.5 rounded bg-seafoam-900/30 font-mono text-xs text-seafoam-200">
                         {name}
                       </div>
                     <% end %>
@@ -168,14 +168,14 @@ defmodule ElixirAiWeb.AdminLive do
 
               <%= if node_liveviews != %{} do %>
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-widest text-cyan-600 mb-1.5">
+                  <p class="text-xs font-semibold uppercase tracking-widest text-seafoam-600 mb-1.5">
                     LiveViews
                   </p>
                   <div class="space-y-1">
                     <%= for {view, instances} <- node_liveviews do %>
-                      <div class="px-2 py-1.5 rounded bg-cyan-900/30 flex justify-between items-center gap-2">
-                        <span class="font-mono text-xs text-cyan-200">{short_module(view)}</span>
-                        <span class="text-xs text-cyan-600">×{length(instances)}</span>
+                      <div class="px-2 py-1.5 rounded bg-seafoam-900/30 flex justify-between items-center gap-2">
+                        <span class="font-mono text-xs text-seafoam-200">{short_module(view)}</span>
+                        <span class="text-xs text-seafoam-600">×{length(instances)}</span>
                       </div>
                     <% end %>
                   </div>
@@ -183,7 +183,7 @@ defmodule ElixirAiWeb.AdminLive do
               <% end %>
 
               <%= if node_singletons == [] and node_runners == [] and node_liveviews == %{} do %>
-                <p class="text-xs text-cyan-700 italic">No active processes</p>
+                <p class="text-xs text-seafoam-700 italic">No active processes</p>
               <% end %>
             </div>
           </div>
@@ -207,7 +207,7 @@ defmodule ElixirAiWeb.AdminLive do
         </section>
       <% end %>
 
-      <p class="text-xs text-cyan-800">Refreshes every 1s or on node events.</p>
+      <p class="text-xs text-seafoam-800">Refreshes every 1s or on node events.</p>
     </div>
     """
   end
@@ -236,7 +236,7 @@ defmodule ElixirAiWeb.AdminLive do
           unreachable
         </span>
       <% other -> %>
-        <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-cyan-900 text-cyan-300">
+        <span class="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-seafoam-900 text-seafoam-300">
           {inspect(other)}
         </span>
     <% end %>

@@ -19,14 +19,14 @@ defmodule ElixirAiWeb.FormComponents do
   def input(assigns) do
     ~H"""
     <div>
-      <label for={@name} class="block text-sm text-cyan-300 mb-1">{@label}</label>
+      <label for={@name} class="block text-sm text-seafoam-300 mb-1">{@label}</label>
       <input
         type={@type}
         name={@name}
         id={@name}
         value={@value}
         autocomplete={@autocomplete}
-        class="w-full rounded px-3 py-2 text-sm bg-cyan-950/20 border border-cyan-900/40 text-cyan-100 focus:outline-none focus:ring-1 focus:ring-cyan-700"
+        class="w-full rounded px-3 py-2 text-sm bg-seafoam-950/20 border border-seafoam-900/40 text-seafoam-100 focus:outline-none focus:ring-1 focus:ring-seafoam-700"
         {@rest}
       />
     </div>
@@ -47,7 +47,7 @@ defmodule ElixirAiWeb.FormComponents do
   def modal(assigns) do
     ~H"""
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div class="w-full max-w-sm rounded-lg border border-cyan-900/40 bg-cyan-950 p-6 shadow-xl">
+      <div class="w-full max-w-sm rounded-lg border border-seafoam-900/40 bg-seafoam-950 p-6 shadow-xl">
         {render_slot(@inner_block)}
       </div>
     </div>

@@ -24,7 +24,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(user_input: "")
          |> assign(messages: conversation.messages)
          |> assign(streaming_response: conversation.streaming_response)
-         |> assign(background_color: "bg-cyan-950/30")
+         |> assign(background_color: "bg-seafoam-950/30")
          |> assign(provider: conversation.provider)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
@@ -42,7 +42,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(user_input: "")
          |> assign(messages: [])
          |> assign(streaming_response: nil)
-         |> assign(background_color: "bg-cyan-950/30")
+         |> assign(background_color: "bg-seafoam-950/30")
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
@@ -54,7 +54,7 @@ defmodule ElixirAiWeb.ChatLive do
     ~H"""
     <div class="flex flex-col h-full  rounded-lg">
       <div class="px-4 py-3 font-semibold flex items-center gap-3">
-        <.link navigate={~p"/"} class="text-cyan-700 hover:text-cyan-400 transition-colors">
+        <.link navigate={~p"/"} class="text-seafoam-700 hover:text-seafoam-400 transition-colors">
           ←
         </.link>
         <span class="flex-1">{@conversation_name}</span>

@@ -27,11 +27,11 @@ defmodule ElixirAiWeb.AiProvidersLive do
     ~H"""
     <div>
       <div class="flex items-center justify-between mb-8">
-        <h1 class="text-lg font-semibold text-cyan-300">AI Providers</h1>
+        <h1 class="text-lg font-semibold text-seafoam-300">AI Providers</h1>
         <button
           phx-click="toggle_form"
           phx-target={@myself}
-          class="px-3 py-1 rounded text-sm border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors"
+          class="px-3 py-1 rounded text-sm border border-seafoam-900/40 bg-seafoam-950/20 text-seafoam-300 hover:border-seafoam-700 hover:bg-seafoam-950/40 transition-colors"
         >
           {if @show_form, do: "Cancel", else: "Add Provider"}
         </button>
@@ -41,7 +41,7 @@ defmodule ElixirAiWeb.AiProvidersLive do
         <form
           phx-submit="create_provider"
           phx-target={@myself}
-          class="mb-8 space-y-2 p-4 rounded-lg border border-cyan-900/40 bg-cyan-950/10"
+          class="mb-8 space-y-2 p-4 rounded-lg border border-seafoam-900/40 bg-seafoam-950/10"
         >
           <.input type="text" name="name" value={@form_data["name"]} label="Provider Name" />
           <.input type="text" name="model_name" value={@form_data["model_name"]} label="Model Name" />
@@ -54,7 +54,7 @@ defmodule ElixirAiWeb.AiProvidersLive do
           />
           <button
             type="submit"
-            class="w-full px-4 py-2 rounded text-sm border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors"
+            class="w-full px-4 py-2 rounded text-sm border border-seafoam-900/40 bg-seafoam-950/20 text-seafoam-300 hover:border-seafoam-700 hover:bg-seafoam-950/40 transition-colors"
           >
             Create Provider
           </button>r
@@ -67,14 +67,14 @@ defmodule ElixirAiWeb.AiProvidersLive do
 
       <ul class="space-y-2">
         <%= if @providers == [] do %>
-          <li class="text-sm text-cyan-700">No providers configured yet.</li>
+          <li class="text-sm text-seafoam-700">No providers configured yet.</li>
         <% end %>
         <%= for provider <- @providers do %>
-          <li class="p-4 rounded-lg border border-cyan-900/40 bg-cyan-950/20">
+          <li class="p-4 rounded-lg border border-seafoam-900/40 bg-seafoam-950/20">
             <div class="flex items-start justify-between">
               <div class="flex-1">
-                <h3 class="text-sm font-medium text-cyan-300">{provider.name}</h3>
-                <p class="text-xs text-cyan-500 mt-1">Model: {provider.model_name}</p>
+                <h3 class="text-sm font-medium text-seafoam-300">{provider.name}</h3>
+                <p class="text-xs text-seafoam-500 mt-1">Model: {provider.model_name}</p>
               </div>
               <button
                 phx-click="delete_provider"
@@ -91,15 +91,15 @@ defmodule ElixirAiWeb.AiProvidersLive do
 
       <%= if @confirm_delete_id do %>
         <.modal>
-          <h2 class="text-sm font-semibold text-cyan-300 mb-2">Delete Provider</h2>
-          <p class="text-sm text-cyan-500 mb-6">
+          <h2 class="text-sm font-semibold text-seafoam-300 mb-2">Delete Provider</h2>
+          <p class="text-sm text-seafoam-500 mb-6">
             Are you sure you want to delete this provider? This action cannot be undone.
           </p>
           <div class="flex gap-3 justify-end">
             <button
               phx-click="cancel_delete"
               phx-target={@myself}
-              class="px-4 py-2 rounded text-sm border border-cyan-900/40 bg-cyan-950/20 text-cyan-300 hover:border-cyan-700 hover:bg-cyan-950/40 transition-colors"
+              class="px-4 py-2 rounded text-sm border border-seafoam-900/40 bg-seafoam-950/20 text-seafoam-300 hover:border-seafoam-700 hover:bg-seafoam-950/40 transition-colors"
             >
               Cancel
             </button>

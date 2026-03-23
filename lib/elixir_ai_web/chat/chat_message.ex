@@ -9,8 +9,8 @@ defmodule ElixirAiWeb.ChatMessage do
 
   def tool_result_message(assigns) do
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900/40 bg-cyan-950/20 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900/40 bg-cyan-900/10 text-cyan-600">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900/40 bg-seafoam-950/20 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900/40 bg-seafoam-900/10 text-seafoam-600">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
@@ -23,11 +23,11 @@ defmodule ElixirAiWeb.ChatMessage do
             clip-rule="evenodd"
           />
         </svg>
-        <span class="text-cyan-600/70 flex-1 truncate">tool result</span>
-        <span class="text-cyan-800 text-[10px] truncate max-w-[12rem]">{@tool_call_id}</span>
+        <span class="text-seafoam-600/70 flex-1 truncate">tool result</span>
+        <span class="text-seafoam-800 text-[10px] truncate max-w-[12rem]">{@tool_call_id}</span>
       </div>
       <div class="px-3 py-2">
-        <pre class="text-cyan-500/70 whitespace-pre-wrap break-all">{@content}</pre>
+        <pre class="text-seafoam-500/70 whitespace-pre-wrap break-all">{@content}</pre>
       </div>
     </div>
     """
@@ -38,7 +38,7 @@ defmodule ElixirAiWeb.ChatMessage do
   def user_message(assigns) do
     ~H"""
     <div class="mb-2 text-sm text-right">
-      <div class={"inline-block px-3 py-2 rounded-lg  bg-cyan-950 text-cyan-50 #{max_width_class()} text-left"}>
+      <div class={"inline-block px-3 py-2 rounded-lg  bg-seafoam-950 text-seafoam-50 #{max_width_class()} text-left"}>
         {@content}
       </div>
     </div>
@@ -85,14 +85,14 @@ defmodule ElixirAiWeb.ChatMessage do
         <%= if @reasoning_content && @reasoning_content != "" do %>
           <button
             type="button"
-            class="flex items-center text-cyan-500/60 hover:text-cyan-300 transition-colors duration-150 cursor-pointer"
+            class="flex items-center text-seafoam-500/60 hover:text-seafoam-300 transition-colors duration-150 cursor-pointer"
             phx-click={
               JS.toggle_class("collapsed", to: "#reasoning-stream")
               |> JS.toggle_class("rotate-180", to: "#reasoning-stream-chevron")
             }
             aria-label="Toggle reasoning"
           >
-            <div class="flex items-center gap-1 text-cyan-100/40 ps-2 mb-1">
+            <div class="flex items-center gap-1 text-seafoam-100/40 ps-2 mb-1">
               <span class="text-xs">reasoning</span>
               <svg
                 id="reasoning-stream-chevron"
@@ -115,7 +115,7 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-hook="MarkdownStream"
           phx-update="ignore"
           data-event="reasoning_chunk"
-          class={"reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs #{max_width_class()} mb-1 markdown"}
+          class={"reasoning-content block px-3 py-2 rounded-lg bg-seafoam-950/50 text-seafoam-400 italic text-xs #{max_width_class()} mb-1 markdown"}
         >
         </div>
       </div>
@@ -127,7 +127,7 @@ defmodule ElixirAiWeb.ChatMessage do
         phx-hook="MarkdownStream"
         phx-update="ignore"
         data-event="md_chunk"
-        class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-cyan-950/50"}
+        class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50"}
       >
       </div>
     </div>
@@ -146,14 +146,14 @@ defmodule ElixirAiWeb.ChatMessage do
       <%= if @reasoning_content && @reasoning_content != "" do %>
         <button
           type="button"
-          class="flex items-center text-cyan-500/60 hover:text-cyan-300 transition-colors duration-150 cursor-pointer"
+          class="flex items-center text-seafoam-500/60 hover:text-seafoam-300 transition-colors duration-150 cursor-pointer"
           phx-click={
             JS.toggle_class("collapsed", to: "##{@reasoning_id}")
             |> JS.toggle_class("rotate-180", to: "##{@reasoning_id}-chevron")
           }
           aria-label="Toggle reasoning"
         >
-          <div class="flex items-center gap-1 text-cyan-100/40 ps-2 mb-1">
+          <div class="flex items-center gap-1 text-seafoam-100/40 ps-2 mb-1">
             <span class="text-xs">reasoning</span>
             <svg
               id={"#{@reasoning_id}-chevron"}
@@ -176,7 +176,7 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-update="ignore"
           data-md={@reasoning_content}
           class={[
-            "reasoning-content block px-3 py-2 rounded-lg bg-cyan-950/50 text-cyan-400 italic text-xs #{max_width_class()} mb-1 markdown",
+            "reasoning-content block px-3 py-2 rounded-lg bg-seafoam-950/50 text-seafoam-400 italic text-xs #{max_width_class()} mb-1 markdown",
             !@expanded && "collapsed"
           ]}
         >
@@ -191,7 +191,7 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-hook="MarkdownRender"
           phx-update="ignore"
           data-md={@content}
-          class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-cyan-950/50"}
+          class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50"}
         >
         </div>
       <% end %>
@@ -249,12 +249,44 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :arguments, :any, default: nil
 
   defp called_tool_call(assigns) do
+    assigns =
+      assigns
+      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
+      |> assign(:_truncated, truncate_args(assigns.arguments))
+
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900/60 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900/60 bg-cyan-900/20 text-cyan-400">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900/60 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900/60 bg-seafoam-900/20 text-seafoam-400">
         <.tool_call_icon />
-        <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
-        <span class="flex items-center gap-1 text-cyan-500/50">
+        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
+        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
+          {@_truncated}
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <button
+          :if={@_truncated}
+          type="button"
+          phx-click={
+            JS.toggle_class("hidden", to: "##{@_id}-args")
+            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
+          }
+          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
+        >
+          <svg
+            id={"#{@_id}-chevron"}
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3 transition-transform duration-200"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+        <span class="flex items-center gap-1 text-seafoam-500/50 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -270,7 +302,9 @@ defmodule ElixirAiWeb.ChatMessage do
           <span class="text-[10px]">called</span>
         </span>
       </div>
-      <.tool_call_args arguments={@arguments} />
+      <div id={"#{@_id}-args"} class="hidden">
+        <.tool_call_args arguments={@arguments} />
+      </div>
     </div>
     """
   end
@@ -279,17 +313,51 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :arguments, :any, default: nil
 
   defp pending_tool_call(assigns) do
+    assigns =
+      assigns
+      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
+      |> assign(:_truncated, truncate_args(assigns.arguments))
+
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900 bg-cyan-900/30 text-cyan-400">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900 bg-seafoam-900/30 text-seafoam-400">
         <.tool_call_icon />
-        <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
-        <span class="flex items-center gap-1 text-cyan-600">
-          <span class="w-1.5 h-1.5 rounded-full bg-cyan-600 animate-pulse inline-block"></span>
+        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
+        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
+          {@_truncated}
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <button
+          :if={@_truncated}
+          type="button"
+          phx-click={
+            JS.toggle_class("hidden", to: "##{@_id}-args")
+            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
+          }
+          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
+        >
+          <svg
+            id={"#{@_id}-chevron"}
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3 transition-transform duration-200"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+        <span class="flex items-center gap-1 text-seafoam-600 shrink-0">
+          <span class="w-1.5 h-1.5 rounded-full bg-seafoam-600 animate-pulse inline-block"></span>
           <span class="text-[10px]">running</span>
         </span>
       </div>
-      <.tool_call_args arguments={@arguments} />
+      <div id={"#{@_id}-args"} class="hidden">
+        <.tool_call_args arguments={@arguments} />
+      </div>
     </div>
     """
   end
@@ -300,21 +368,50 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp success_tool_call(assigns) do
     assigns =
-      assign(
-        assigns,
+      assigns
+      |> assign(
         :result_str,
         case assigns.result do
           s when is_binary(s) -> s
           other -> inspect(other, pretty: true, limit: :infinity)
         end
       )
+      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
+      |> assign(:_truncated, truncate_args(assigns.arguments))
 
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-cyan-900 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-cyan-900 bg-cyan-900/30 text-cyan-400">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900 bg-seafoam-900/30 text-seafoam-400">
         <.tool_call_icon />
-        <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
-        <span class="flex items-center gap-1 text-emerald-500">
+        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
+        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
+          {@_truncated}
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <button
+          :if={@_truncated}
+          type="button"
+          phx-click={
+            JS.toggle_class("hidden", to: "##{@_id}-args")
+            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
+          }
+          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
+        >
+          <svg
+            id={"#{@_id}-chevron"}
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3 transition-transform duration-200"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+        <span class="flex items-center gap-1 text-emerald-500 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -330,9 +427,11 @@ defmodule ElixirAiWeb.ChatMessage do
           <span class="text-[10px]">done</span>
         </span>
       </div>
-      <.tool_call_args arguments={@arguments} />
+      <div id={"#{@_id}-args"} class="hidden">
+        <.tool_call_args arguments={@arguments} />
+      </div>
       <div class="px-3 py-2">
-        <div class="text-cyan-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
+        <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
         <pre class="text-emerald-300/80 whitespace-pre-wrap break-all">{@result_str}</pre>
       </div>
     </div>
@@ -344,12 +443,44 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :error, :string, required: true
 
   defp error_tool_call(assigns) do
+    assigns =
+      assigns
+      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
+      |> assign(:_truncated, truncate_args(assigns.arguments))
+
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-red-900/50 bg-cyan-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-red-900/50 bg-red-900/20 text-cyan-400">
+    <div class={"mb-1 #{max_width_class()} rounded-lg border border-red-900/50 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
+      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-red-900/50 bg-red-900/20 text-seafoam-400">
         <.tool_call_icon />
-        <span class="text-cyan-300 font-semibold flex-1">{@name}</span>
-        <span class="flex items-center gap-1 text-red-500">
+        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
+        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
+          {@_truncated}
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <button
+          :if={@_truncated}
+          type="button"
+          phx-click={
+            JS.toggle_class("hidden", to: "##{@_id}-args")
+            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
+          }
+          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
+        >
+          <svg
+            id={"#{@_id}-chevron"}
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3 transition-transform duration-200"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </button>
+        <span class="flex items-center gap-1 text-red-500 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -361,13 +492,33 @@ defmodule ElixirAiWeb.ChatMessage do
           <span class="text-[10px]">error</span>
         </span>
       </div>
-      <.tool_call_args arguments={@arguments} />
+      <div id={"#{@_id}-args"} class="hidden">
+        <.tool_call_args arguments={@arguments} />
+      </div>
       <div class="px-3 py-2 bg-red-950/20">
         <div class="text-red-700 mb-1 uppercase tracking-wider text-[10px]">error</div>
         <pre class="text-red-400 whitespace-pre-wrap break-all">{@error}</pre>
       </div>
     </div>
     """
+  end
+
+  defp truncate_args(nil), do: nil
+  defp truncate_args(""), do: nil
+
+  defp truncate_args(args) when is_binary(args) do
+    compact =
+      case Jason.decode(args) do
+        {:ok, decoded} -> Jason.encode!(decoded)
+        _ -> args
+      end
+
+    if String.length(compact) > 72, do: String.slice(compact, 0, 69) <> "\u2026", else: compact
+  end
+
+  defp truncate_args(args) do
+    compact = Jason.encode!(args)
+    if String.length(compact) > 72, do: String.slice(compact, 0, 69) <> "\u2026", else: compact
   end
 
   attr :arguments, :any, default: nil
@@ -390,9 +541,9 @@ defmodule ElixirAiWeb.ChatMessage do
       )
 
     ~H"""
-    <div class="px-3 py-2 border-b border-cyan-900/50">
-      <div class="text-cyan-700 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
-      <pre class="text-cyan-400 whitespace-pre-wrap break-all">{@pretty_args}</pre>
+    <div class="px-3 py-2 border-b border-seafoam-900/50">
+      <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
+      <pre class="text-seafoam-400 whitespace-pre-wrap break-all">{@pretty_args}</pre>
     </div>
     """
   end
