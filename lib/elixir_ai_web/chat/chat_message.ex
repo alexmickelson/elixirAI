@@ -199,64 +199,72 @@ defmodule ElixirAiWeb.ChatMessage do
     """
   end
 
-  # Dispatches to the appropriate tool call component based on result state.
-  # Four states:
-  #   :error key present  → error (runtime failure)
-  #   :result key present → success (runtime completed)
-  #   :index key present  → pending (streaming in-progress)
-  #   none of the above   → called (DB-loaded completed call; result is a separate message)
+  # Dispatches to the unified tool_call_card component, determining state from the map keys:
+  #   :error key  → :error   (runtime failure)
+  #   :result key → :success (completed)
+  #   :index key  → :pending (streaming in-progress)
+  #   none        → :called  (DB-loaded; result is a separate message)
   attr :tool_call, :map, required: true
 
   defp tool_call_item(%{tool_call: tool_call} = assigns) do
-    cond do
-      Map.has_key?(tool_call, :error) ->
-        assigns =
-          assigns
-          |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments])
-          |> assign(:error, tool_call.error)
+    state =
+      cond do
+        Map.has_key?(tool_call, :error) -> :error
+        Map.has_key?(tool_call, :result) -> :success
+        Map.has_key?(tool_call, :index) -> :pending
+        true -> :called
+      end
 
-        ~H"<.error_tool_call name={@name} arguments={@arguments} error={@error} />"
+    assigns =
+      assigns
+      |> assign(:_state, state)
+      |> assign(:_name, tool_call.name)
+      |> assign(:_arguments, tool_call[:arguments])
+      |> assign(:_result, tool_call[:result])
+      |> assign(:_error, tool_call[:error])
 
-      Map.has_key?(tool_call, :result) ->
-        assigns =
-          assigns
-          |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments])
-          |> assign(:result, tool_call.result)
-
-        ~H"<.success_tool_call name={@name} arguments={@arguments} result={@result} />"
-
-      Map.has_key?(tool_call, :index) ->
-        assigns =
-          assigns
-          |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments])
-
-        ~H"<.pending_tool_call name={@name} arguments={@arguments} />"
-
-      true ->
-        assigns =
-          assigns
-          |> assign(:name, tool_call.name)
-          |> assign(:arguments, tool_call[:arguments])
-
-        ~H"<.called_tool_call name={@name} arguments={@arguments} />"
-    end
+    ~H"<.tool_call_card
+  state={@_state}
+  name={@_name}
+  arguments={@_arguments}
+  result={@_result}
+  error={@_error}
+/>"
   end
 
+  attr :state, :atom, required: true
   attr :name, :string, required: true
   attr :arguments, :any, default: nil
+  attr :result, :any, default: nil
+  attr :error, :string, default: nil
 
-  defp called_tool_call(assigns) do
+  defp tool_call_card(assigns) do
     assigns =
       assigns
       |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
       |> assign(:_truncated, truncate_args(assigns.arguments))
+      |> assign(
+        :_result_str,
+        case assigns.result do
+          nil -> nil
+          s when is_binary(s) -> s
+          other -> inspect(other, pretty: true, limit: :infinity)
+        end
+      )
 
     ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900/60 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900/60 bg-seafoam-900/20 text-seafoam-400">
+    <div class={[
+      "mb-1 #{max_width_class()} rounded-lg border text-xs font-mono overflow-hidden bg-seafoam-950/40",
+      @state == :error && "border-red-900/50",
+      @state == :called && "border-seafoam-900/60",
+      @state in [:pending, :success] && "border-seafoam-900"
+    ]}>
+      <div class={[
+        "flex items-center gap-2 px-3 py-1.5 border-b text-seafoam-400",
+        @state == :error && "border-red-900/50 bg-red-900/20",
+        @state == :called && "border-seafoam-900/60 bg-seafoam-900/20",
+        @state in [:pending, :success] && "border-seafoam-900 bg-seafoam-900/30"
+      ]}>
         <.tool_call_icon />
         <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
         <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
@@ -286,7 +294,7 @@ defmodule ElixirAiWeb.ChatMessage do
             />
           </svg>
         </button>
-        <span class="flex items-center gap-1 text-seafoam-500/50 shrink-0">
+        <span :if={@state == :called} class="flex items-center gap-1 text-seafoam-500/50 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -301,117 +309,11 @@ defmodule ElixirAiWeb.ChatMessage do
           </svg>
           <span class="text-[10px]">called</span>
         </span>
-      </div>
-      <div id={"#{@_id}-args"} class="hidden">
-        <.tool_call_args arguments={@arguments} />
-      </div>
-    </div>
-    """
-  end
-
-  attr :name, :string, required: true
-  attr :arguments, :any, default: nil
-
-  defp pending_tool_call(assigns) do
-    assigns =
-      assigns
-      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
-      |> assign(:_truncated, truncate_args(assigns.arguments))
-
-    ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900 bg-seafoam-900/30 text-seafoam-400">
-        <.tool_call_icon />
-        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
-        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
-          {@_truncated}
-        </span>
-        <span :if={!@_truncated} class="flex-1" />
-        <button
-          :if={@_truncated}
-          type="button"
-          phx-click={
-            JS.toggle_class("hidden", to: "##{@_id}-args")
-            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
-          }
-          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
-        >
-          <svg
-            id={"#{@_id}-chevron"}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            class="w-3 h-3 transition-transform duration-200"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </button>
-        <span class="flex items-center gap-1 text-seafoam-600 shrink-0">
+        <span :if={@state == :pending} class="flex items-center gap-1 text-seafoam-600 shrink-0">
           <span class="w-1.5 h-1.5 rounded-full bg-seafoam-600 animate-pulse inline-block"></span>
           <span class="text-[10px]">running</span>
         </span>
-      </div>
-      <div id={"#{@_id}-args"} class="hidden">
-        <.tool_call_args arguments={@arguments} />
-      </div>
-    </div>
-    """
-  end
-
-  attr :name, :string, required: true
-  attr :arguments, :any, default: nil
-  attr :result, :any, required: true
-
-  defp success_tool_call(assigns) do
-    assigns =
-      assigns
-      |> assign(
-        :result_str,
-        case assigns.result do
-          s when is_binary(s) -> s
-          other -> inspect(other, pretty: true, limit: :infinity)
-        end
-      )
-      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
-      |> assign(:_truncated, truncate_args(assigns.arguments))
-
-    ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900 bg-seafoam-900/30 text-seafoam-400">
-        <.tool_call_icon />
-        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
-        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
-          {@_truncated}
-        </span>
-        <span :if={!@_truncated} class="flex-1" />
-        <button
-          :if={@_truncated}
-          type="button"
-          phx-click={
-            JS.toggle_class("hidden", to: "##{@_id}-args")
-            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
-          }
-          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
-        >
-          <svg
-            id={"#{@_id}-chevron"}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            class="w-3 h-3 transition-transform duration-200"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </button>
-        <span class="flex items-center gap-1 text-emerald-500 shrink-0">
+        <span :if={@state == :success} class="flex items-center gap-1 text-emerald-500 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -426,61 +328,7 @@ defmodule ElixirAiWeb.ChatMessage do
           </svg>
           <span class="text-[10px]">done</span>
         </span>
-      </div>
-      <div id={"#{@_id}-args"} class="hidden">
-        <.tool_call_args arguments={@arguments} />
-      </div>
-      <div class="px-3 py-2">
-        <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
-        <pre class="text-emerald-300/80 whitespace-pre-wrap break-all">{@result_str}</pre>
-      </div>
-    </div>
-    """
-  end
-
-  attr :name, :string, required: true
-  attr :arguments, :any, default: nil
-  attr :error, :string, required: true
-
-  defp error_tool_call(assigns) do
-    assigns =
-      assigns
-      |> assign(:_id, "tc-#{:erlang.phash2({assigns.name, assigns.arguments})}")
-      |> assign(:_truncated, truncate_args(assigns.arguments))
-
-    ~H"""
-    <div class={"mb-1 #{max_width_class()} rounded-lg border border-red-900/50 bg-seafoam-950/40 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-red-900/50 bg-red-900/20 text-seafoam-400">
-        <.tool_call_icon />
-        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
-        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
-          {@_truncated}
-        </span>
-        <span :if={!@_truncated} class="flex-1" />
-        <button
-          :if={@_truncated}
-          type="button"
-          phx-click={
-            JS.toggle_class("hidden", to: "##{@_id}-args")
-            |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
-          }
-          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
-        >
-          <svg
-            id={"#{@_id}-chevron"}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            class="w-3 h-3 transition-transform duration-200"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </button>
-        <span class="flex items-center gap-1 text-red-500 shrink-0">
+        <span :if={@state == :error} class="flex items-center gap-1 text-red-500 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -495,7 +343,11 @@ defmodule ElixirAiWeb.ChatMessage do
       <div id={"#{@_id}-args"} class="hidden">
         <.tool_call_args arguments={@arguments} />
       </div>
-      <div class="px-3 py-2 bg-red-950/20">
+      <div :if={@state == :success} class="px-3 py-2">
+        <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
+        <pre class="text-emerald-300/80 whitespace-pre-wrap break-all">{@_result_str}</pre>
+      </div>
+      <div :if={@state == :error} class="px-3 py-2 bg-red-950/20">
         <div class="text-red-700 mb-1 uppercase tracking-wider text-[10px]">error</div>
         <pre class="text-red-400 whitespace-pre-wrap break-all">{@error}</pre>
       </div>
@@ -542,7 +394,7 @@ defmodule ElixirAiWeb.ChatMessage do
 
     ~H"""
     <div class="px-3 py-2 border-b border-seafoam-900/50">
-      <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
+      <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
       <pre class="text-seafoam-400 whitespace-pre-wrap break-all">{@pretty_args}</pre>
     </div>
     """

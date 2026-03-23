@@ -10,17 +10,17 @@
 @theme {
   --color-brand: #fd4f00;
 
-  --color-seafoam-50: #ecfeff;
-  --color-seafoam-100: #cffafe;
-  --color-seafoam-200: #a5f3fc;
-  --color-seafoam-300: #67e8f9;
-  --color-seafoam-400: #22d3ee;
-  --color-seafoam-500: #06b6d4;
-  --color-seafoam-600: #0891b2;
-  --color-seafoam-700: #0e7490;
-  --color-seafoam-800: #155e75;
-  --color-seafoam-900: #164e63;
-  --color-seafoam-950: #083344;
+  --color-seafoam-50: hsl(183.16 90% 96.27%);
+  --color-seafoam-100: hsl(185.11 85.92% 90.39%);
+  --color-seafoam-200: hsl(186.21 83.55% 81.76%);
+  --color-seafoam-300: hsl(186.99 82.41% 69.02%);
+  --color-seafoam-400: hsl(187.94 75.71% 53.33%);
+  --color-seafoam-500: hsl(188.74 84.5% 42.75%);
+  --color-seafoam-600: hsl(191.65 81.4% 36.47%);
+  --color-seafoam-700: hsl(192.92 72.28% 30.98%);
+  --color-seafoam-800: hsl(194.38 59.57% 27.06%);
+  --color-seafoam-900: hsl(198.18 73.33% 17.65%);
+  --color-seafoam-950: hsl(198.26 58.97% 7.65%);
 }
 
 @variant phx-click-loading (&.phx-click-loading, .phx-click-loading &);
