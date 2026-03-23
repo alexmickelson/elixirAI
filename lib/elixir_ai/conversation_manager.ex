@@ -1,6 +1,6 @@
 defmodule ElixirAi.ConversationManager do
   use GenServer
-  alias ElixirAi.{Conversation, Message}
+  alias ElixirAi.{Conversation, Message, AiTools}
   import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1]
   require Logger
 
@@ -24,8 +24,9 @@ defmodule ElixirAi.ConversationManager do
     {:ok, %{conversations: :loading, subscriptions: MapSet.new(), runners: %{}}}
   end
 
-  def create_conversation(name, ai_provider_id) do
-    GenServer.call(@name, {:create, name, ai_provider_id})
+  def create_conversation(name, ai_provider_id, category \\ "user-web", allowed_tools \\ nil) do
+    tools = allowed_tools || AiTools.all_tool_names()
+    GenServer.call(@name, {:create, name, ai_provider_id, category, tools})
   end
 
   def open_conversation(name) do
@@ -54,14 +55,14 @@ defmodule ElixirAi.ConversationManager do
   end
 
   def handle_call(
-        {:create, name, ai_provider_id},
+        {:create, name, ai_provider_id, category, allowed_tools},
         _from,
         %{conversations: conversations} = state
       ) do
     if Map.has_key?(conversations, name) do
       {:reply, {:error, :already_exists}, state}
     else
-      case Conversation.create(name, ai_provider_id) do
+      case Conversation.create(name, ai_provider_id, category, allowed_tools) do
         :ok ->
           reply_with_started(name, state, fn new_state ->
             %{new_state | conversations: Map.put(new_state.conversations, name, [])}
@@ -152,7 +153,7 @@ defmodule ElixirAi.ConversationManager do
   end
 
   # Returns {pid} to callers that only need to know the process started (e.g. create).
-  defp reply_with_started(name, state, update_state \\ fn s -> s end) do
+  defp reply_with_started(name, state, update_state) do
     case start_and_subscribe(name, state) do
       {:ok, pid, new_subscriptions, new_runners} ->
         new_state =
@@ -160,8 +161,12 @@ defmodule ElixirAi.ConversationManager do
 
         {:reply, {:ok, pid}, new_state}
 
-      {:error, _reason} = error ->
-        {:reply, error, state}
+      {:error, reason} ->
+        Logger.error(
+          "ConversationManager: failed to start runner for #{name}: #{inspect(reason)}"
+        )
+
+        {:reply, {:error, :failed_to_load}, state}
     end
   end
 

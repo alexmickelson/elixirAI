@@ -47,7 +47,7 @@ defmodule ElixirAi.ChatUtils do
     }
   end
 
-  def request_ai_response(server, messages, tools, provider) do
+  def request_ai_response(server, messages, tools, provider, tool_choice \\ "auto") do
     Task.start_link(fn ->
       api_url = provider.completions_url
       api_key = provider.api_token
@@ -69,7 +69,8 @@ defmodule ElixirAi.ChatUtils do
         model: model,
         stream: true,
         messages: messages |> Enum.map(&api_message/1),
-        tools: Enum.map(tools, & &1.definition)
+        tools: Enum.map(tools, & &1.definition),
+        tool_choice: tool_choice
       }
 
       headers = [{"authorization", "Bearer #{api_key}"}]

@@ -1,0 +1,149 @@
+defmodule ElixirAi.AiTools do
+  @moduledoc """
+  Central registry of all AI tools available to conversations.
+
+  Tools are split into two categories:
+
+  - **Server tools** (`store_thing`, `read_thing`): functions are fully defined
+    here and always execute regardless of whether a browser session is open.
+
+  - **LiveView tools** (`set_background_color`, `navigate_to`): functions
+    dispatch to the registered LiveView pid. If no browser tab is connected
+    the call still succeeds immediately with a descriptive result so the AI
+    conversation is never blocked.
+
+  Tool names are stored in the `conversations` table (`allowed_tools` column)
+  and act as the gate for which tools are active for a given conversation.
+  """
+
+  import ElixirAi.ChatUtils, only: [ai_tool: 1]
+
+  @server_tool_names ["store_thing", "read_thing"]
+  @liveview_tool_names ["set_background_color", "navigate_to"]
+  @all_tool_names @server_tool_names ++ @liveview_tool_names
+
+  def server_tool_names, do: @server_tool_names
+
+  def liveview_tool_names, do: @liveview_tool_names
+
+  def all_tool_names, do: @all_tool_names
+
+  def build_server_tools(server, allowed_names) do
+    [store_thing(server), read_thing(server)]
+    |> Enum.filter(&(&1.name in allowed_names))
+  end
+
+  def build_liveview_tools(server, allowed_names) do
+    [set_background_color(server), navigate_to(server)]
+    |> Enum.filter(&(&1.name in allowed_names))
+  end
+
+  @doc "Convenience wrapper — builds all allowed tools (server + liveview)."
+  def build(server, allowed_names) do
+    build_server_tools(server, allowed_names) ++ build_liveview_tools(server, allowed_names)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Server tools
+  # ---------------------------------------------------------------------------
+
+  def store_thing(server) do
+    ai_tool(
+      name: "store_thing",
+      description: "store a key value pair in memory",
+      function: &ElixirAi.ToolTesting.hold_thing/1,
+      parameters: ElixirAi.ToolTesting.hold_thing_params(),
+      server: server
+    )
+  end
+
+  def read_thing(server) do
+    ai_tool(
+      name: "read_thing",
+      description: "read a key value pair that was previously stored with store_thing",
+      function: &ElixirAi.ToolTesting.get_thing/1,
+      parameters: ElixirAi.ToolTesting.get_thing_params(),
+      server: server
+    )
+  end
+
+  # ---------------------------------------------------------------------------
+  # LiveView tools
+  # ---------------------------------------------------------------------------
+
+  def set_background_color(server) do
+    ai_tool(
+      name: "set_background_color",
+      description:
+        "set the background color of the chat interface, accepts specified tailwind colors",
+      function: fn args -> dispatch_to_liveview(server, "set_background_color", args) end,
+      parameters: %{
+        "type" => "object",
+        "properties" => %{
+          "color" => %{
+            "type" => "string",
+            "enum" => [
+              "bg-cyan-950/30",
+              "bg-red-950/30",
+              "bg-green-950/30",
+              "bg-blue-950/30",
+              "bg-yellow-950/30",
+              "bg-purple-950/30",
+              "bg-pink-950/30"
+            ]
+          }
+        },
+        "required" => ["color"]
+      },
+      server: server
+    )
+  end
+
+  def navigate_to(server) do
+    ai_tool(
+      name: "navigate_to",
+      description: """
+      Navigate the user's browser to a page in the application.
+      Only use paths that exist in the app:
+        "/"          — home page
+        "/admin"      — admin panel
+        "/chat/:name" — a chat conversation, where :name is the conversation name
+      Provide the exact path string including the leading slash.
+      """,
+      function: fn args -> dispatch_to_liveview(server, "navigate_to", args) end,
+      parameters: %{
+        "type" => "object",
+        "properties" => %{
+          "path" => %{
+            "type" => "string",
+            "description" =>
+              "The application path to navigate to, e.g. \"/\", \"/admin\", \"/chat/my-chat\""
+          }
+        },
+        "required" => ["path"]
+      },
+      server: server
+    )
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private
+  # ---------------------------------------------------------------------------
+
+
+  defp dispatch_to_liveview(server, tool_name, args) do
+    case GenServer.call(server, :get_liveview_pid) do
+      nil ->
+        {:ok, "no browser session active, #{tool_name} skipped"}
+
+      liveview_pid ->
+        send(liveview_pid, {:liveview_tool_call, tool_name, args, self()})
+
+        receive do
+          {:liveview_tool_result, result} -> result
+        after
+          5_000 -> {:ok, "browser session timed out, #{tool_name} skipped"}
+        end
+    end
+  end
+end

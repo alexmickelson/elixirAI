@@ -11,8 +11,8 @@ defmodule ElixirAi.AiProvider do
         id: Zoi.optional(Zoi.string()),
         name: Zoi.string(),
         model_name: Zoi.string(),
-        api_token: Zoi.string(),
-        completions_url: Zoi.string()
+        api_token: Zoi.nullish(Zoi.string()),
+        completions_url: Zoi.nullish(Zoi.string())
       })
     end
 

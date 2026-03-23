@@ -5,7 +5,7 @@ defmodule ElixirAi.MixProject do
     [
       app: :elixir_ai,
       version: "0.1.0",
-      elixir: "~> 1.19",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
@@ -57,7 +57,7 @@ defmodule ElixirAi.MixProject do
       {:libcluster, "~> 3.3"},
       {:bandit, "~> 1.5"},
       {:ecto_sql, "~> 3.11"},
-      {:postgrex, ">= 0.0.0"},
+      {:postgrex, ">= 0.22.0"},
       {:horde, "~> 0.9"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mimic, "~> 2.3.0"},

@@ -25,6 +25,7 @@ defmodule ElixirAi.Message do
       role: Zoi.string(),
       content: Zoi.nullish(Zoi.string()),
       reasoning_content: Zoi.nullish(Zoi.string()),
+      tool_choice: Zoi.nullish(Zoi.string()),
       inserted_at: Zoi.any()
     })
   end
@@ -125,6 +126,7 @@ defmodule ElixirAi.Message do
       tm.role,
       tm.content,
       tm.reasoning_content,
+      tm.tool_choice,
       tm.inserted_at
     FROM text_messages tm
     WHERE tm.conversation_id = $(conversation_id)
@@ -222,6 +224,7 @@ defmodule ElixirAi.Message do
       prev_message_table,
       role,
       content,
+      tool_choice,
       inserted_at
     ) VALUES (
       $(conversation_id),
@@ -229,6 +232,7 @@ defmodule ElixirAi.Message do
       $(prev_message_table),
       $(role),
       $(content),
+      $(tool_choice),
       $(inserted_at)
     )
     """
@@ -239,6 +243,7 @@ defmodule ElixirAi.Message do
       "prev_message_table" => prev_table,
       "role" => "user",
       "content" => message[:content],
+      "tool_choice" => message[:tool_choice],
       "inserted_at" => timestamp
     }
 

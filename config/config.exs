@@ -39,6 +39,7 @@ config :logger, :console,
   metadata: [:request_id]
 
 config :phoenix, :json_library, Jason
+config :postgrex, :json_library, Jason
 
 if System.get_env("RELEASE_MODE") do
   config :kernel, net_ticktime: 2

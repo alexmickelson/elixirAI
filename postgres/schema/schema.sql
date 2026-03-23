@@ -14,19 +14,23 @@ CREATE TABLE IF NOT EXISTS conversations (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name           TEXT        NOT NULL UNIQUE,
   ai_provider_id UUID        NOT NULL REFERENCES ai_providers(id) ON DELETE RESTRICT,
+  category       TEXT        NOT NULL DEFAULT 'user-web',
+  allowed_tools  JSONB       NOT NULL DEFAULT '[]',
+  tool_choice    TEXT        NOT NULL DEFAULT 'auto' CHECK (tool_choice IN ('auto', 'none', 'required')),
   inserted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS text_messages (
-  id                BIGSERIAL   PRIMARY KEY,
-  conversation_id   UUID        NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  prev_message_id   BIGINT,
-  prev_message_table TEXT       CHECK (prev_message_table IN ('text_messages', 'tool_calls_request_messages', 'tool_response_messages')),
-  role              TEXT        NOT NULL CHECK (role IN ('user', 'assistant')),
-  content           TEXT,
-  reasoning_content TEXT,
-  inserted_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                 BIGSERIAL   PRIMARY KEY,
+  conversation_id    UUID        NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  prev_message_id    BIGINT,
+  prev_message_table TEXT        CHECK (prev_message_table IN ('text_messages', 'tool_calls_request_messages', 'tool_response_messages')),
+  role               TEXT        NOT NULL CHECK (role IN ('user', 'assistant')),
+  content            TEXT,
+  reasoning_content  TEXT,
+  tool_choice        TEXT        CHECK (tool_choice IN ('auto', 'none', 'required')),
+  inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS tool_calls_request_messages (

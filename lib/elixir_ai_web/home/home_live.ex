@@ -111,6 +111,12 @@ defmodule ElixirAiWeb.HomeLive do
           {:error, :already_exists} ->
             {:noreply, assign(socket, error: "A conversation with that name already exists")}
 
+          {:error, :failed_to_load} ->
+            {:noreply,
+             assign(socket,
+               error: "Conversation was saved but failed to load"
+             )}
+
           _ ->
             {:noreply, assign(socket, error: "Failed to create conversation")}
         end
