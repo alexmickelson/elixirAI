@@ -109,17 +109,20 @@ defmodule ElixirAi.ConversationManager do
     {:noreply, %{state | runners: runners}}
   end
 
-  def handle_info({:db_error, reason}, state) do
+  def handle_info({:error, {:db_error, reason}}, state) do
     Logger.error("ConversationManager received db_error: #{inspect(reason)}")
     {:noreply, state}
   end
 
-  def handle_info({:sql_result_validation_error, error}, state) do
+  def handle_info({:error, {:sql_result_validation_error, error}}, state) do
     Logger.error("ConversationManager received sql_result_validation_error: #{inspect(error)}")
     {:noreply, state}
   end
 
-  def handle_info({:store_message, name, message}, %{conversations: conversations} = state) do
+  def handle_info(
+        {:error, {:store_message, name, message}},
+        %{conversations: conversations} = state
+      ) do
     case Conversation.find_id(name) do
       {:ok, conv_id} ->
         Message.insert(conv_id, message, topic: conversation_message_topic(name))
@@ -177,7 +180,7 @@ defmodule ElixirAi.ConversationManager do
     case start_and_subscribe(name, state) do
       {:ok, pid, new_subscriptions, new_runners} ->
         new_state = %{state | subscriptions: new_subscriptions, runners: new_runners}
-        conversation = GenServer.call(pid, :get_conversation)
+        conversation = GenServer.call(pid, {:conversation, :get_conversation})
         {:reply, {:ok, Map.put(conversation, :runner_pid, pid)}, new_state}
 
       {:error, _reason} = error ->

@@ -133,7 +133,7 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
       when is_pid(pid) do
-    case GenServer.call(pid, :get_streaming_response) do
+    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
       nil ->
         {:noreply, assign(socket, streaming_response: nil)}
 
@@ -285,7 +285,7 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   defp get_snapshot(%{assigns: %{runner_pid: pid}} = _socket) when is_pid(pid) do
-    case GenServer.call(pid, :get_streaming_response) do
+    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
       nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
       snapshot -> snapshot
     end

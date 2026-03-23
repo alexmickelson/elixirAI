@@ -131,7 +131,7 @@ defmodule ElixirAi.AiTools do
   # ---------------------------------------------------------------------------
 
   defp dispatch_to_liveview(server, tool_name, args) do
-    pids = GenServer.call(server, :get_liveview_pids)
+    pids = GenServer.call(server, {:session, :get_liveview_pids})
 
     case pids do
       [] ->

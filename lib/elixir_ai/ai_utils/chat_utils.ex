@@ -30,12 +30,16 @@ defmodule ElixirAi.ChatUtils do
       Task.start_link(fn ->
         try do
           result = function.(args)
-          send(server, {:tool_response, current_message_id, tool_call_id, result})
+          send(server, {:stream, {:tool_response, current_message_id, tool_call_id, result}})
         rescue
           e ->
             reason = Exception.format(:error, e, __STACKTRACE__)
             Logger.error("Tool task crashed: #{reason}")
-            send(server, {:tool_response, current_message_id, tool_call_id, {:error, reason}})
+
+            send(
+              server,
+              {:stream, {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+            )
         end
       end)
     end
@@ -91,7 +95,7 @@ defmodule ElixirAi.ChatUtils do
 
         {:error, reason} ->
           Logger.warning("AI request failed: #{inspect(reason)} for #{api_url}")
-          send(server, {:ai_request_error, reason})
+          send(server, {:stream, {:ai_request_error, reason}})
       end
     end)
   end

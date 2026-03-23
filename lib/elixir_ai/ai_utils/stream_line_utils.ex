@@ -29,7 +29,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
       }) do
     send(
       server,
-      {:start_new_ai_response, id}
+      {:stream, {:start_new_ai_response, id}}
     )
   end
 
@@ -45,7 +45,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
 
     send(
       server,
-      {:ai_text_stream_finish, id}
+      {:stream, {:ai_text_stream_finish, id}}
     )
   end
 
@@ -61,7 +61,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
       }) do
     send(
       server,
-      {:ai_reasoning_chunk, id, reasoning_content}
+      {:stream, {:ai_reasoning_chunk, id, reasoning_content}}
     )
   end
 
@@ -77,7 +77,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
       }) do
     send(
       server,
-      {:ai_text_chunk, id, reasoning_content}
+      {:stream, {:ai_text_chunk, id, reasoning_content}}
     )
   end
 
@@ -105,12 +105,13 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
 
         send(
           server,
-          {:ai_tool_call_start, id, {tool_name, tool_args_start, tool_index, tool_call_id}}
+          {:stream,
+           {:ai_tool_call_start, id, {tool_name, tool_args_start, tool_index, tool_call_id}}}
         )
 
       %{"index" => tool_index, "function" => %{"arguments" => tool_args_diff}} ->
         # Logger.info("Received tool call middle for index #{tool_index}")
-        send(server, {:ai_tool_call_middle, id, {tool_args_diff, tool_index}})
+        send(server, {:stream, {:ai_tool_call_middle, id, {tool_args_diff, tool_index}}})
 
       other ->
         Logger.warning("Unmatched tool call item: #{inspect(other)}")
@@ -126,7 +127,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
         }
       ) do
     # Logger.info("Received tool_calls_finished with message: #{inspect(message)}")
-    send(server, {:ai_tool_call_end, id})
+    send(server, {:stream, {:ai_tool_call_end, id}})
   end
 
   def handle_stream_line(_server, %{"error" => error_info}) do

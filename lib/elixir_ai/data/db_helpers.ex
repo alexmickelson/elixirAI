@@ -28,7 +28,7 @@ defmodule ElixirAi.Data.DbHelpers do
         Phoenix.PubSub.broadcast(
           ElixirAi.PubSub,
           topic,
-          {:db_error, Exception.message(exception)}
+          {:error, {:db_error, Exception.message(exception)}}
         )
 
         {:error, :db_error}
@@ -55,7 +55,13 @@ defmodule ElixirAi.Data.DbHelpers do
 
       error ->
         Logger.error("Validation error: #{inspect(error)}")
-        Phoenix.PubSub.broadcast(ElixirAi.PubSub, topic, {:sql_result_validation_error, error})
+
+        Phoenix.PubSub.broadcast(
+          ElixirAi.PubSub,
+          topic,
+          {:error, {:sql_result_validation_error, error}}
+        )
+
         error
     end)
   end
