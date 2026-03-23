@@ -14,6 +14,7 @@ defmodule ElixirAiWeb.ChatLive do
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
+          ChatRunner.register_liveview_pid(name, self())
           send(self(), :sync_streaming)
         end
 
@@ -258,9 +259,29 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}
   end
 
+  def handle_info({:liveview_tool_call, "set_background_color", %{"color" => color}}, socket) do
+    {:noreply, assign(socket, background_color: color)}
+  end
+
+  def handle_info({:liveview_tool_call, "navigate_to", %{"path" => path}}, socket) do
+    {:noreply, push_navigate(socket, to: path)}
+  end
+
+  def handle_info({:liveview_tool_call, _tool_name, _args}, socket) do
+    {:noreply, socket}
+  end
+
   def handle_info({:set_background_color, color}, socket) do
     Logger.info("setting background color to #{color}")
     {:noreply, assign(socket, background_color: color)}
+  end
+
+  def terminate(_reason, %{assigns: %{conversation_name: name}} = socket) do
+    if connected?(socket) do
+      ChatRunner.deregister_liveview_pid(name, self())
+    end
+
+    :ok
   end
 
   defp get_snapshot(%{assigns: %{runner_pid: pid}} = _socket) when is_pid(pid) do

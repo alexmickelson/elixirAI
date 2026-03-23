@@ -23,8 +23,8 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:register_liveview_pid, liveview_pid})
   end
 
-  def deregister_liveview_pid(name) do
-    GenServer.call(via(name), :deregister_liveview_pid)
+  def deregister_liveview_pid(name, liveview_pid) when is_pid(liveview_pid) do
+    GenServer.call(via(name), {:deregister_liveview_pid, liveview_pid})
   end
 
   @spec get_conversation(String.t()) :: any()
@@ -102,8 +102,7 @@ defmodule ElixirAi.ChatRunner do
        server_tools: server_tools,
        liveview_tools: liveview_tools,
        provider: provider,
-       liveview_pid: nil,
-       liveview_monitor_ref: nil
+       liveview_pids: %{}
      }}
   end
 
@@ -352,6 +351,17 @@ defmodule ElixirAi.ChatRunner do
     {:noreply, %{state | streaming_response: nil, pending_tool_calls: []}}
   end
 
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    case Map.get(state.liveview_pids, pid) do
+      ^ref ->
+        Logger.info("ChatRunner #{state.name}: LiveView #{inspect(pid)} disconnected")
+        {:noreply, %{state | liveview_pids: Map.delete(state.liveview_pids, pid)}}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
   def handle_call(:get_conversation, _from, state) do
     {:reply, state, state}
   end
@@ -360,20 +370,24 @@ defmodule ElixirAi.ChatRunner do
     {:reply, state.streaming_response, state}
   end
 
-  def handle_call(:get_liveview_pid, _from, state) do
-    {:reply, state.liveview_pid, state}
+  def handle_call(:get_liveview_pids, _from, state) do
+    {:reply, Map.keys(state.liveview_pids), state}
   end
 
   def handle_call({:register_liveview_pid, liveview_pid}, _from, state) do
-    # Clear any previous monitor
-    if state.liveview_monitor_ref, do: Process.demonitor(state.liveview_monitor_ref, [:flush])
     ref = Process.monitor(liveview_pid)
-    {:reply, :ok, %{state | liveview_pid: liveview_pid, liveview_monitor_ref: ref}}
+    {:reply, :ok, %{state | liveview_pids: Map.put(state.liveview_pids, liveview_pid, ref)}}
   end
 
-  def handle_call(:deregister_liveview_pid, _from, state) do
-    if state.liveview_monitor_ref, do: Process.demonitor(state.liveview_monitor_ref, [:flush])
-    {:reply, :ok, %{state | liveview_pid: nil, liveview_monitor_ref: nil}}
+  def handle_call({:deregister_liveview_pid, liveview_pid}, _from, state) do
+    case Map.pop(state.liveview_pids, liveview_pid) do
+      {nil, _} ->
+        {:reply, :ok, state}
+
+      {ref, new_pids} ->
+        Process.demonitor(ref, [:flush])
+        {:reply, :ok, %{state | liveview_pids: new_pids}}
+    end
   end
 
   def handle_call({:set_tool_choice, tool_choice}, _from, state) do
@@ -393,11 +407,6 @@ defmodule ElixirAi.ChatRunner do
          server_tools: server_tools,
          liveview_tools: liveview_tools
      }}
-  end
-
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{liveview_monitor_ref: ref} = state) do
-    Logger.info("ChatRunner #{state.name}: LiveView disconnected, clearing liveview_pid")
-    {:noreply, %{state | liveview_pid: nil, liveview_monitor_ref: nil}}
   end
 
   defp broadcast_ui(name, msg),

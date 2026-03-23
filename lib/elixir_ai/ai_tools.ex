@@ -130,20 +130,16 @@ defmodule ElixirAi.AiTools do
   # Private
   # ---------------------------------------------------------------------------
 
-
   defp dispatch_to_liveview(server, tool_name, args) do
-    case GenServer.call(server, :get_liveview_pid) do
-      nil ->
+    pids = GenServer.call(server, :get_liveview_pids)
+
+    case pids do
+      [] ->
         {:ok, "no browser session active, #{tool_name} skipped"}
 
-      liveview_pid ->
-        send(liveview_pid, {:liveview_tool_call, tool_name, args, self()})
-
-        receive do
-          {:liveview_tool_result, result} -> result
-        after
-          5_000 -> {:ok, "browser session timed out, #{tool_name} skipped"}
-        end
+      _ ->
+        Enum.each(pids, &send(&1, {:liveview_tool_call, tool_name, args}))
+        {:ok, "#{tool_name} sent to #{length(pids)} session(s)"}
     end
   end
 end
