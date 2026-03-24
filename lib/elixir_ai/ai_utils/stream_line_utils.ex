@@ -135,6 +135,11 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
     :ok
   end
 
+  def handle_stream_line(server, "proxy error" <> _ = error) when is_binary(error) do
+    Logger.error("Proxy error in AI stream: #{error}")
+    send(server, {:stream, {:ai_request_error, error}})
+  end
+
   def handle_stream_line(server, json) when is_binary(json) do
     case Jason.decode(json) do
       {:ok, body} ->

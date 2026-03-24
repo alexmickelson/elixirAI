@@ -101,6 +101,17 @@ defmodule ElixirAi.Conversation do
     end
   end
 
+  def find_category(name) do
+    sql = "SELECT category FROM conversations WHERE name = $(name) LIMIT 1"
+    params = %{"name" => name}
+
+    case DbHelpers.run_sql(sql, params, "conversations") do
+      {:error, :db_error} -> {:error, :db_error}
+      [] -> {:error, :not_found}
+      [row | _] -> {:ok, row["category"] || "user-web"}
+    end
+  end
+
   def find_allowed_tools(name) do
     sql = "SELECT allowed_tools FROM conversations WHERE name = $(name) LIMIT 1"
     params = %{"name" => name}

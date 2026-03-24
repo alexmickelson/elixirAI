@@ -30,6 +30,18 @@ const VoiceControl = {
     // Button clicks dispatch DOM events to avoid a server round-trip
     this.el.addEventListener("voice:start", () => this.startRecording());
     this.el.addEventListener("voice:stop", () => this.stopRecording());
+
+    // Handle navigate_to from the server — trigger a live navigation so the
+    // root layout (and this VoiceLive) is preserved across page changes.
+    this.handleEvent("navigate_to", ({ path }) => {
+      let a = document.createElement("a");
+      a.href = path;
+      a.setAttribute("data-phx-link", "redirect");
+      a.setAttribute("data-phx-link-state", "push");
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
   },
 
   destroyed() {

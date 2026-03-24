@@ -159,7 +159,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
 
       ElixirAi.ChatUtils.request_ai_response(
         self(),
-        state.messages ++ [new_message],
+        messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
         state.server_tools ++ state.liveview_tools,
         state.provider,
         state.tool_choice

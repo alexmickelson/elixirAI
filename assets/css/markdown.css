@@ -92,7 +92,7 @@
 }
 
 .markdown table {
-  @apply block w-full border-collapse my-4 text-sm overflow-x-auto;
+  @apply block w-full border-collapse my-4 text-sm overflow-x-auto max-w-full;
 }
 .markdown thead {
   @apply bg-seafoam-950;

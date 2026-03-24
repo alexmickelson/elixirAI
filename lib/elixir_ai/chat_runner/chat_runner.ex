@@ -1,7 +1,7 @@
 defmodule ElixirAi.ChatRunner do
   require Logger
   use GenServer
-  alias ElixirAi.{AiTools, Conversation, Message}
+  alias ElixirAi.{AiTools, Conversation, Message, SystemPrompts}
   import ElixirAi.PubsubTopics
   import ElixirAi.ChatRunner.OutboundHelpers
 
@@ -94,6 +94,12 @@ defmodule ElixirAi.ChatRunner do
         _ -> "auto"
       end
 
+    system_prompt =
+      case Conversation.find_category(name) do
+        {:ok, category} -> SystemPrompts.for_category(category)
+        _ -> nil
+      end
+
     server_tools = AiTools.build_server_tools(self(), allowed_tools)
     liveview_tools = AiTools.build_liveview_tools(self(), allowed_tools)
 
@@ -106,7 +112,7 @@ defmodule ElixirAi.ChatRunner do
 
       ElixirAi.ChatUtils.request_ai_response(
         self(),
-        messages,
+        messages_with_system_prompt(messages, system_prompt),
         server_tools ++ liveview_tools,
         provider,
         tool_choice
@@ -117,6 +123,7 @@ defmodule ElixirAi.ChatRunner do
      %{
        name: name,
        messages: messages,
+       system_prompt: system_prompt,
        streaming_response: nil,
        pending_tool_calls: [],
        allowed_tools: allowed_tools,

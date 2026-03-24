@@ -20,7 +20,7 @@
   --color-seafoam-700: hsl(192.92 72.28% 30.98%);
   --color-seafoam-800: hsl(194.38 59.57% 27.06%);
   --color-seafoam-900: hsl(198.18 73.33% 17.65%);
-  --color-seafoam-950: hsl(198.26 58.97% 7.65%);
+  --color-seafoam-950: hsl(196.88 72.73% 8.63%);
 }
 
 @variant phx-click-loading (&.phx-click-loading, .phx-click-loading &);

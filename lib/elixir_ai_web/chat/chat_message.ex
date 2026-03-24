@@ -1,8 +1,9 @@
 defmodule ElixirAiWeb.ChatMessage do
   use Phoenix.Component
   alias Phoenix.LiveView.JS
+  import ElixirAiWeb.JsonDisplay
 
-  defp max_width_class, do: "max-w-300"
+  defp max_width_class, do: "max-w-full xl:max-w-300"
 
   attr :content, :string, required: true
   attr :tool_call_id, :string, required: true
@@ -38,7 +39,7 @@ defmodule ElixirAiWeb.ChatMessage do
   def user_message(assigns) do
     ~H"""
     <div class="mb-2 text-sm text-right">
-      <div class={"inline-block px-3 py-2 rounded-lg  bg-seafoam-950 text-seafoam-50 #{max_width_class()} text-left"}>
+      <div class={"w-fit px-3 py-2 rounded-lg  bg-seafoam-950 text-seafoam-50 #{max_width_class()} text-left"}>
         {@content}
       </div>
     </div>
@@ -78,7 +79,7 @@ defmodule ElixirAiWeb.ChatMessage do
   # chunks instead of re-rendering the full markdown on every token.
   def streaming_assistant_message(assigns) do
     ~H"""
-    <div class="mb-2 text-sm text-left">
+    <div class="mb-2 text-sm text-left min-w-0">
       <!-- Reasoning section — only shown once reasoning_content is non-empty.
            The div is always in the DOM so the hook mounts before chunks arrive. -->
       <div id="stream-reasoning-wrap">
@@ -127,7 +128,7 @@ defmodule ElixirAiWeb.ChatMessage do
         phx-hook="MarkdownStream"
         phx-update="ignore"
         data-event="md_chunk"
-        class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50"}
+        class={"w-fit px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50 overflow-x-auto"}
       >
       </div>
     </div>
@@ -142,7 +143,7 @@ defmodule ElixirAiWeb.ChatMessage do
 
   defp message_bubble(assigns) do
     ~H"""
-    <div class="mb-2 text-sm text-left">
+    <div class="mb-2 text-sm text-left min-w-0">
       <%= if @reasoning_content && @reasoning_content != "" do %>
         <button
           type="button"
@@ -191,7 +192,7 @@ defmodule ElixirAiWeb.ChatMessage do
           phx-hook="MarkdownRender"
           phx-update="ignore"
           data-md={@content}
-          class={"inline-block px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50"}
+          class={"w-fit px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50 overflow-x-auto"}
         >
         </div>
       <% end %>
@@ -253,47 +254,49 @@ defmodule ElixirAiWeb.ChatMessage do
       )
 
     ~H"""
-    <div class={[
-      "mb-1 #{max_width_class()} rounded-lg border text-xs font-mono overflow-hidden bg-seafoam-950/40",
-      @state == :error && "border-red-900/50",
-      @state == :called && "border-seafoam-900/60",
-      @state in [:pending, :success] && "border-seafoam-900"
-    ]}>
-      <div class={[
-        "flex items-center gap-2 px-3 py-1.5 border-b text-seafoam-400",
-        @state == :error && "border-red-900/50 bg-red-900/20",
-        @state == :called && "border-seafoam-900/60 bg-seafoam-900/20",
-        @state in [:pending, :success] && "border-seafoam-900 bg-seafoam-900/30"
-      ]}>
-        <.tool_call_icon />
-        <span class="text-seafoam-300 font-semibold shrink-0">{@name}</span>
-        <span :if={@_truncated} class="text-seafoam-600/50 truncate flex-1 min-w-0 ml-1">
-          {@_truncated}
-        </span>
-        <span :if={!@_truncated} class="flex-1" />
-        <button
-          :if={@_truncated}
-          type="button"
-          phx-click={
+    <div
+      id={@_id}
+      class={[
+        "mb-1 #{max_width_class()} rounded-lg border text-xs font-mono overflow-hidden bg-seafoam-950/40",
+        @state == :error && "border-red-900/50",
+        @state == :called && "border-seafoam-900/60",
+        @state in [:pending, :success] && "border-seafoam-900"
+      ]}
+    >
+      <div
+        class={[
+          "flex items-center gap-2 px-3 py-1.5 border-b text-seafoam-400",
+          @_truncated && "cursor-pointer select-none",
+          @state == :error && "border-red-900/50 bg-red-900/20",
+          @state == :called && "border-seafoam-900/60 bg-seafoam-900/20",
+          @state in [:pending, :success] && "border-seafoam-900 bg-seafoam-900/30"
+        ]}
+        phx-click={
+          @_truncated &&
             JS.toggle_class("hidden", to: "##{@_id}-args")
             |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
-          }
-          class="shrink-0 text-seafoam-700 hover:text-seafoam-400 transition-colors mx-1"
+        }
+      >
+        <.tool_call_icon />
+        <span class="text-seafoam-400 font-semibold shrink-0">{@name}</span>
+        <span :if={@_truncated} class="text-seafoam-500 truncate flex-1 min-w-0 ml-1">
+          <.json_display json={@_truncated} inline />
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <svg
+          :if={@_truncated}
+          id={"#{@_id}-chevron"}
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          class="w-3 h-3 shrink-0 mx-1 text-seafoam-700 transition-transform duration-200"
         >
-          <svg
-            id={"#{@_id}-chevron"}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            class="w-3 h-3 transition-transform duration-200"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </button>
+          <path
+            fill-rule="evenodd"
+            d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+            clip-rule="evenodd"
+          />
+        </svg>
         <span :if={@state == :called} class="flex items-center gap-1 text-seafoam-500/50 shrink-0">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -376,26 +379,10 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :arguments, :any, default: nil
 
   defp tool_call_args(%{arguments: args} = assigns) when not is_nil(args) and args != "" do
-    assigns =
-      assign(
-        assigns,
-        :pretty_args,
-        case args do
-          s when is_binary(s) ->
-            case Jason.decode(s) do
-              {:ok, decoded} -> Jason.encode!(decoded, pretty: true)
-              _ -> s
-            end
-
-          other ->
-            Jason.encode!(other, pretty: true)
-        end
-      )
-
     ~H"""
     <div class="px-3 py-2 border-b border-seafoam-900/50">
       <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
-      <pre class="text-seafoam-400 whitespace-pre-wrap break-all">{@pretty_args}</pre>
+      <.json_display json={@arguments} />
     </div>
     """
   end

@@ -2,15 +2,29 @@ defmodule ElixirAiWeb.VoiceLive do
   use ElixirAiWeb, :live_view
   require Logger
 
+  alias ElixirAiWeb.Voice.Recording
+  alias ElixirAiWeb.Voice.VoiceConversation
+  alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
+  import ElixirAi.PubsubTopics
+
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, state: :idle, transcription: nil, expanded: false), layout: false}
+    {:ok,
+     assign(socket,
+       state: :idle,
+       transcription: nil,
+       expanded: false,
+       conversation_name: nil,
+       messages: [],
+       streaming_response: nil,
+       runner_pid: nil,
+       ai_error: nil
+     ), layout: false}
   end
 
   def render(assigns) do
     ~H"""
     <div id="voice-control-hook" phx-hook="VoiceControl">
       <%= if not @expanded do %>
-        <%!-- Collapsed: semi-transparent mic button, still listens to Ctrl+Space via hook --%>
         <button
           phx-click="expand"
           title="Voice input (Ctrl+Space)"
@@ -26,110 +40,21 @@ defmodule ElixirAiWeb.VoiceLive do
           </svg>
         </button>
       <% else %>
-        <%!-- Expanded panel --%>
-        <div class="fixed top-4 right-4 w-72 bg-seafoam-950/95 border border-seafoam-800 rounded-2xl shadow-2xl z-50 p-4 flex flex-col gap-3 backdrop-blur">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <%= if @state == :idle do %>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 text-seafoam-500 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v7a2 2 0 1 0 4 0V5a2 2 0 0 0-2-2zm-7 9a7 7 0 0 0 14 0h2a9 9 0 0 1-8 8.94V23h-2v-2.06A9 9 0 0 1 3 12H5z" />
-                </svg>
-                <span class="text-seafoam-400 font-semibold text-sm">Voice Input</span>
-              <% end %>
-              <%= if @state == :recording do %>
-                <span class="relative flex h-3 w-3 shrink-0">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75">
-                  </span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                </span>
-                <span class="text-seafoam-50 font-semibold text-sm">Recording</span>
-              <% end %>
-              <%= if @state == :processing do %>
-                <span class="relative flex h-3 w-3 shrink-0">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-seafoam-400 opacity-75">
-                  </span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-seafoam-400"></span>
-                </span>
-                <span class="text-seafoam-50 font-semibold text-sm">Processing…</span>
-              <% end %>
-              <%= if @state == :transcribed do %>
-                <span class="text-seafoam-300 font-semibold text-sm">Transcription</span>
-              <% end %>
-            </div>
-            <%!-- Minimize button --%>
-            <button
-              phx-click="minimize"
-              title="Minimize"
-              class="p-1 rounded-lg text-seafoam-600 hover:text-seafoam-300 hover:bg-seafoam-800/50 transition-colors"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M5 12h14" />
-              </svg>
-            </button>
-          </div>
-          <%= if @state in [:recording, :processing] do %>
-            <div id="voice-viz-wrapper" phx-update="ignore">
-              <canvas id="voice-viz-canvas" height="72" class="w-full rounded-lg bg-seafoam-950 block">
-              </canvas>
-            </div>
-          <% end %>
+        <div class={[
+          "fixed top-4 right-4 z-50 bg-seafoam-900 border border-seafoam-800 rounded-2xl shadow-2xl flex flex-col backdrop-blur",
+          if(@state == :transcribed, do: "w-96 max-h-[80vh]", else: "w-72")
+        ]}>
           <%= if @state == :transcribed do %>
-            <.transcription_display transcription={@transcription} />
-          <% end %>
-          <%= if @state == :idle do %>
-            <button
-              phx-click={JS.dispatch("voice:start", to: "#voice-control-hook")}
-              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-seafoam-700 hover:bg-seafoam-600 text-seafoam-50 text-xs font-medium transition-colors"
-            >
-              <span>Start Recording</span>
-              <kbd class="text-seafoam-300 bg-seafoam-800 border border-seafoam-600 px-1.5 py-0.5 rounded font-mono">
-                Ctrl+Space
-              </kbd>
-            </button>
-          <% end %>
-          <%= if @state == :recording do %>
-            <button
-              phx-click={JS.dispatch("voice:stop", to: "#voice-control-hook")}
-              class="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-seafoam-800 hover:bg-seafoam-700 text-seafoam-50 text-xs font-medium transition-colors border border-seafoam-700"
-            >
-              <span>Stop Recording</span>
-              <kbd class="text-seafoam-300 bg-seafoam-900 border border-seafoam-700 px-1.5 py-0.5 rounded font-mono">
-                Space
-              </kbd>
-            </button>
-          <% end %>
-          <%= if @state == :transcribed do %>
-            <button
-              phx-click="dismiss_transcription"
-              class="text-xs text-seafoam-500 hover:text-seafoam-300 transition-colors text-center w-full"
-            >
-              Dismiss
-            </button>
+            <VoiceConversation.voice_conversation
+              messages={@messages}
+              streaming_response={@streaming_response}
+              ai_error={@ai_error}
+            />
+          <% else %>
+            <Recording.recording state={@state} />
           <% end %>
         </div>
       <% end %>
-    </div>
-    """
-  end
-
-  defp transcription_display(assigns) do
-    ~H"""
-    <div class="rounded-xl bg-seafoam-900/60 border border-seafoam-700 px-3 py-2">
-      <p class="text-sm text-seafoam-50 leading-relaxed">{@transcription}</p>
     </div>
     """
   end
@@ -168,15 +93,254 @@ defmodule ElixirAiWeb.VoiceLive do
   end
 
   def handle_event("dismiss_transcription", _params, socket) do
-    {:noreply, assign(socket, state: :idle, transcription: nil, expanded: false)}
+    name = socket.assigns.conversation_name
+
+    if name do
+      if socket.assigns.runner_pid do
+        try do
+          GenServer.call(socket.assigns.runner_pid, {:session, {:deregister_liveview_pid, self()}})
+        catch
+          :exit, _ -> :ok
+        end
+      end
+
+      Phoenix.PubSub.unsubscribe(ElixirAi.PubSub, chat_topic(name))
+    end
+
+    {:noreply,
+     assign(socket,
+       state: :idle,
+       transcription: nil,
+       expanded: false,
+       conversation_name: nil,
+       messages: [],
+       streaming_response: nil,
+       runner_pid: nil,
+       ai_error: nil
+     )}
   end
 
+  # Transcription received — open conversation and send as user message
   def handle_info({:transcription_result, {:ok, text}}, socket) do
-    {:noreply, assign(socket, state: :transcribed, transcription: text)}
+    socket = start_voice_conversation(socket, text)
+    {:noreply, socket}
   end
 
   def handle_info({:transcription_result, {:error, reason}}, socket) do
     Logger.error("VoiceLive: transcription failed: #{inspect(reason)}")
     {:noreply, assign(socket, state: :idle)}
+  end
+
+  # --- Chat PubSub handlers (same pattern as ChatLive) ---
+
+  def handle_info({:user_chat_message, message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [message]))
+     |> push_event("scroll_to_bottom", %{})}
+  end
+
+  def handle_info(
+        {:start_ai_response_stream,
+         %{id: _id, reasoning_content: "", content: ""} = starting_response},
+        socket
+      ) do
+    {:noreply, assign(socket, streaming_response: starting_response)}
+  end
+
+  def handle_info(
+        {:reasoning_chunk_content, reasoning_content},
+        %{assigns: %{streaming_response: nil}} = socket
+      ) do
+    base = get_snapshot(socket) |> Map.update!(:reasoning_content, &(&1 <> reasoning_content))
+    {:noreply, assign(socket, streaming_response: base)}
+  end
+
+  def handle_info({:reasoning_chunk_content, reasoning_content}, socket) do
+    updated_response = %{
+      socket.assigns.streaming_response
+      | reasoning_content:
+          socket.assigns.streaming_response.reasoning_content <> reasoning_content
+    }
+
+    {:noreply,
+     socket
+     |> assign(streaming_response: updated_response)
+     |> push_event("reasoning_chunk", %{chunk: reasoning_content})}
+  end
+
+  def handle_info(
+        {:text_chunk_content, text_content},
+        %{assigns: %{streaming_response: nil}} = socket
+      ) do
+    base = get_snapshot(socket) |> Map.update!(:content, &(&1 <> text_content))
+    {:noreply, assign(socket, streaming_response: base)}
+  end
+
+  def handle_info({:text_chunk_content, text_content}, socket) do
+    updated_response = %{
+      socket.assigns.streaming_response
+      | content: socket.assigns.streaming_response.content <> text_content
+    }
+
+    {:noreply,
+     socket
+     |> assign(streaming_response: updated_response)
+     |> push_event("md_chunk", %{chunk: text_content})}
+  end
+
+  def handle_info(:tool_calls_finished, socket) do
+    {:noreply, assign(socket, streaming_response: nil)}
+  end
+
+  def handle_info({:tool_request_message, tool_request_message}, socket) do
+    {:noreply, update(socket, :messages, &(&1 ++ [tool_request_message]))}
+  end
+
+  def handle_info({:one_tool_finished, tool_response}, socket) do
+    {:noreply, update(socket, :messages, &(&1 ++ [tool_response]))}
+  end
+
+  def handle_info({:end_ai_response, final_message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [final_message]))
+     |> assign(streaming_response: nil)}
+  end
+
+  def handle_info({:ai_request_error, reason}, socket) do
+    error_message =
+      case reason do
+        "proxy error" <> _ ->
+          "Could not connect to AI provider. Please check your proxy and provider settings."
+
+        %{__struct__: mod, reason: r} ->
+          "#{inspect(mod)}: #{inspect(r)}"
+
+        msg when is_binary(msg) ->
+          msg
+
+        _ ->
+          inspect(reason)
+      end
+
+    {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}
+  end
+
+  def handle_info({:db_error, reason}, socket) do
+    Logger.error("VoiceLive: db error: #{inspect(reason)}")
+    {:noreply, socket}
+  end
+
+  def handle_info({:liveview_tool_call, "navigate_to", %{"path" => path}}, socket) do
+    {:noreply, push_event(socket, "navigate_to", %{path: path})}
+  end
+
+  def handle_info({:liveview_tool_call, _tool_name, _args}, socket) do
+    {:noreply, socket}
+  end
+
+  def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
+      when is_pid(pid) do
+    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
+      nil ->
+        {:noreply, assign(socket, streaming_response: nil)}
+
+      %{content: content, reasoning_content: reasoning_content} = snapshot ->
+        socket =
+          socket
+          |> assign(streaming_response: snapshot)
+          |> then(fn s ->
+            if content != "", do: push_event(s, "md_chunk", %{chunk: content}), else: s
+          end)
+          |> then(fn s ->
+            if reasoning_content != "",
+              do: push_event(s, "reasoning_chunk", %{chunk: reasoning_content}),
+              else: s
+          end)
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_info(:sync_streaming, socket), do: {:noreply, socket}
+
+  def handle_info(:recovery_restart, socket) do
+    {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
+  end
+
+  # --- Private helpers ---
+
+  defp start_voice_conversation(socket, transcription) do
+    name = "voice-#{System.system_time(:second)}"
+
+    case AiProvider.find_by_name("default") do
+      {:ok, provider} ->
+        case ConversationManager.create_conversation(name, provider.id, "voice") do
+          {:ok, _pid} ->
+            case ConversationManager.open_conversation(name) do
+              {:ok, conv} ->
+                connect_and_send(socket, name, conv, transcription)
+
+              {:error, reason} ->
+                assign(socket,
+                  state: :transcribed,
+                  ai_error: "Failed to open voice conversation: #{inspect(reason)}"
+                )
+            end
+
+          {:error, reason} ->
+            assign(socket,
+              state: :transcribed,
+              ai_error: "Failed to create voice conversation: #{inspect(reason)}"
+            )
+        end
+
+      {:error, reason} ->
+        assign(socket,
+          state: :transcribed,
+          ai_error: "No default AI provider found: #{inspect(reason)}"
+        )
+    end
+  end
+
+  defp connect_and_send(socket, name, conversation, transcription) do
+    runner_pid = Map.get(conversation, :runner_pid)
+
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
+
+      if runner_pid,
+        do: GenServer.call(runner_pid, {:session, {:register_liveview_pid, self()}})
+
+      send(self(), :sync_streaming)
+    end
+
+    if runner_pid do
+      GenServer.cast(runner_pid, {:conversation, {:user_message, transcription, nil}})
+    else
+      ChatRunner.new_user_message(name, transcription)
+    end
+
+    assign(socket,
+      state: :transcribed,
+      transcription: transcription,
+      conversation_name: name,
+      messages: conversation.messages,
+      streaming_response: conversation.streaming_response,
+      runner_pid: runner_pid,
+      ai_error: nil
+    )
+  end
+
+  defp get_snapshot(%{assigns: %{runner_pid: pid}}) when is_pid(pid) do
+    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
+      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
+      snapshot -> snapshot
+    end
+  end
+
+  defp get_snapshot(_socket) do
+    %{id: nil, content: "", reasoning_content: "", tool_calls: []}
   end
 end

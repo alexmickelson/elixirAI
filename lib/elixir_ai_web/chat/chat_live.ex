@@ -260,8 +260,17 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_info({:ai_request_error, reason}, socket) do
     error_message =
       case reason do
-        %{__struct__: mod, reason: r} -> "#{inspect(mod)}: #{inspect(r)}"
-        _ -> inspect(reason)
+        "proxy error" <> _ ->
+          "Could not connect to AI provider. Please check your proxy and provider settings."
+
+        %{__struct__: mod, reason: r} ->
+          "#{inspect(mod)}: #{inspect(r)}"
+
+        msg when is_binary(msg) ->
+          msg
+
+        _ ->
+          inspect(reason)
       end
 
     {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}

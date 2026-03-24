@@ -18,4 +18,7 @@ defmodule ElixirAi.ChatRunner.OutboundHelpers do
 
     message
   end
+
+  def messages_with_system_prompt(messages, nil), do: messages
+  def messages_with_system_prompt(messages, prompt), do: [prompt | messages]
 end
