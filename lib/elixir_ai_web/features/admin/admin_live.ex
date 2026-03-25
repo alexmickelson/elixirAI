@@ -57,44 +57,18 @@ defmodule ElixirAiWeb.AdminLive do
   end
 
   defp gather_node_statuses do
-    all_nodes = [Node.self() | Node.list()]
+    located = ElixirAi.ClusterSingletonLauncher.singleton_locations()
 
-    Enum.map(all_nodes, fn node ->
+    Enum.map([Node.self() | Node.list()], fn n ->
       status =
-        if node == Node.self() do
-          try do
-            ElixirAi.ClusterSingleton.status()
-          catch
-            _, _ -> :unreachable
-          end
-        else
-          case :rpc.call(node, ElixirAi.ClusterSingleton, :status, [], 3_000) do
-            {:badrpc, _} -> :unreachable
-            result -> result
-          end
-        end
+        if Enum.any?(located, fn {_, loc} -> loc == n end), do: :running, else: :not_running
 
-      {node, status}
+      {n, status}
     end)
   end
 
   defp gather_singleton_locations do
-    running =
-      :pg.which_groups(ElixirAi.SingletonPG)
-      |> Enum.flat_map(fn
-        {:singleton, module} ->
-          case :pg.get_members(ElixirAi.SingletonPG, {:singleton, module}) do
-            [pid | _] -> [{module, node(pid)}]
-            _ -> []
-          end
-
-        _ ->
-          []
-      end)
-      |> Map.new()
-
-    ElixirAi.ClusterSingleton.configured_singletons()
-    |> Enum.map(fn module -> {module, Map.get(running, module)} end)
+    ElixirAi.ClusterSingletonLauncher.singleton_locations()
   end
 
   # All ChatRunner entries via :pg membership, keyed by conversation name.

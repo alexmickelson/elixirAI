@@ -3,39 +3,40 @@ defmodule ElixirAi.Application do
   use Application
 
   def start(_type, _args) do
-    children = [
-      ElixirAiWeb.Telemetry,
-      # Conditionally start Repo (skip in test environment)
-      repo_child_spec(),
-      default_provider_task(),
-      {Cluster.Supervisor,
-       [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
-      {Phoenix.PubSub, name: ElixirAi.PubSub},
-      {ElixirAi.LiveViewPG, []},
-      {ElixirAi.RunnerPG, []},
-      {ElixirAi.SingletonPG, []},
-      {ElixirAi.PageToolsPG, []},
-      {ElixirAi.AudioProcessingPG, []},
-      {DynamicSupervisor, name: ElixirAi.AudioWorkerSupervisor, strategy: :one_for_one},
-      ElixirAi.ToolTesting,
-      ElixirAiWeb.Endpoint,
-      {Horde.Registry,
-       [
-         name: ElixirAi.ChatRegistry,
-         keys: :unique,
-         members: :auto,
-         delta_crdt_options: [sync_interval: 100]
-       ]},
-      {Horde.DynamicSupervisor,
-       [
-         name: ElixirAi.ChatRunnerSupervisor,
-         strategy: :one_for_one,
-         members: :auto,
-         delta_crdt_options: [sync_interval: 100],
-         process_redistribution: :active
-       ]},
-      cluster_singleton_child_spec()
-    ]
+    children =
+      [
+        ElixirAiWeb.Telemetry,
+        # Conditionally start Repo (skip in test environment)
+        repo_child_spec(),
+        default_provider_task(),
+        {Cluster.Supervisor,
+         [Application.get_env(:libcluster, :topologies, []), [name: ElixirAi.ClusterSupervisor]]},
+        {Phoenix.PubSub, name: ElixirAi.PubSub},
+        {ElixirAi.LiveViewPG, []},
+        {ElixirAi.RunnerPG, []},
+        {ElixirAi.SingletonPG, []},
+        {ElixirAi.PageToolsPG, []},
+        {ElixirAi.AudioProcessingPG, []},
+        {DynamicSupervisor, name: ElixirAi.AudioWorkerSupervisor, strategy: :one_for_one},
+        ElixirAi.ToolTesting,
+        ElixirAiWeb.Endpoint,
+        {Horde.Registry,
+         [
+           name: ElixirAi.ChatRegistry,
+           keys: :unique,
+           members: :auto,
+           delta_crdt_options: [sync_interval: 100]
+         ]},
+        {Horde.DynamicSupervisor,
+         [
+           name: ElixirAi.ChatRunnerSupervisor,
+           strategy: :one_for_one,
+           members: :auto,
+           delta_crdt_options: [sync_interval: 100],
+           process_redistribution: :active
+         ]},
+        cluster_singleton_child_spec(ElixirAi.ConversationManager)
+      ]
 
     opts = [strategy: :one_for_one, name: ElixirAi.Supervisor]
     Supervisor.start_link(children, opts)
@@ -63,11 +64,11 @@ defmodule ElixirAi.Application do
     end
   end
 
-  defp cluster_singleton_child_spec do
+  defp cluster_singleton_child_spec(module) do
     if Application.get_env(:elixir_ai, :env) == :test do
-      Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_cluster_singleton)
+      Supervisor.child_spec({Task, fn -> :ok end}, id: {:skip_cluster_singleton, module})
     else
-      ElixirAi.ClusterSingleton
+      {ElixirAi.ClusterSingletonLauncher, module: module}
     end
   end
 end

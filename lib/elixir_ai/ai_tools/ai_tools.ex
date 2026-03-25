@@ -18,7 +18,7 @@ defmodule ElixirAi.AiTools do
 
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
 
-  @server_tool_names ["store_thing", "read_thing"]
+  @server_tool_names ["store_thing", "read_thing", "list_conversations"]
   @liveview_tool_names ["set_background_color", "navigate_to"]
   @all_tool_names @server_tool_names ++ @liveview_tool_names
 
@@ -29,7 +29,7 @@ defmodule ElixirAi.AiTools do
   def all_tool_names, do: @all_tool_names
 
   def build_server_tools(server, allowed_names) do
-    [store_thing(server), read_thing(server)]
+    [store_thing(server), read_thing(server), list_conversations(server)]
     |> Enum.filter(&(&1.name in allowed_names))
   end
 
@@ -63,6 +63,23 @@ defmodule ElixirAi.AiTools do
       description: "read a key value pair that was previously stored with store_thing",
       function: &ElixirAi.ToolTesting.get_thing/1,
       parameters: ElixirAi.ToolTesting.get_thing_params(),
+      server: server
+    )
+  end
+
+  def list_conversations(server) do
+    ai_tool(
+      name: "list_conversations",
+      description: """
+      Returns a list of all conversation names in the application.
+      Always call this tool before navigating to a conversation page (e.g. /chat/:name)
+      to ensure the conversation exists and to obtain the exact name to use in the path.
+      """,
+      function: fn _args ->
+        names = ElixirAi.ConversationManager.list_conversations()
+        {:ok, names}
+      end,
+      parameters: %{"type" => "object", "properties" => %{}},
       server: server
     )
   end

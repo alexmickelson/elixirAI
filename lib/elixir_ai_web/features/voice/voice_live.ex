@@ -278,43 +278,60 @@ defmodule ElixirAiWeb.VoiceLive do
   # --- Private helpers ---
 
   defp start_voice_conversation(socket, transcription) do
-    name = "voice-#{System.system_time(:second)}"
+    existing_name = socket.assigns.conversation_name
 
-    case AiProvider.find_by_name("default") do
-      {:ok, provider} ->
-        case ConversationManager.create_conversation(name, provider.id, "voice") do
-          {:ok, _pid} ->
-            case ConversationManager.open_conversation(name) do
-              {:ok, conv} ->
-                connect_and_send(socket, name, conv, transcription)
+    if existing_name do
+      # Reuse the existing conversation — just re-open to get a fresh runner pid
+      case ConversationManager.open_conversation(existing_name) do
+        {:ok, conv} ->
+          connect_and_send(socket, existing_name, conv, transcription)
 
-              {:error, reason} ->
-                assign(socket,
-                  state: :transcribed,
-                  ai_error: "Failed to open voice conversation: #{inspect(reason)}"
-                )
-            end
+        {:error, reason} ->
+          assign(socket,
+            state: :transcribed,
+            ai_error: "Failed to reopen voice conversation: #{inspect(reason)}"
+          )
+      end
+    else
+      name = "voice-#{System.system_time(:second)}"
 
-          {:error, reason} ->
-            assign(socket,
-              state: :transcribed,
-              ai_error: "Failed to create voice conversation: #{inspect(reason)}"
-            )
-        end
+      case AiProvider.find_by_name("default") do
+        {:ok, provider} ->
+          case ConversationManager.create_conversation(name, provider.id, "voice") do
+            {:ok, _pid} ->
+              case ConversationManager.open_conversation(name) do
+                {:ok, conv} ->
+                  connect_and_send(socket, name, conv, transcription)
 
-      {:error, reason} ->
-        assign(socket,
-          state: :transcribed,
-          ai_error: "No default AI provider found: #{inspect(reason)}"
-        )
+                {:error, reason} ->
+                  assign(socket,
+                    state: :transcribed,
+                    ai_error: "Failed to open voice conversation: #{inspect(reason)}"
+                  )
+              end
+
+            {:error, reason} ->
+              assign(socket,
+                state: :transcribed,
+                ai_error: "Failed to create voice conversation: #{inspect(reason)}"
+              )
+          end
+
+        {:error, reason} ->
+          assign(socket,
+            state: :transcribed,
+            ai_error: "No default AI provider found: #{inspect(reason)}"
+          )
+      end
     end
   end
 
   defp connect_and_send(socket, name, conversation, transcription) do
     runner_pid = Map.get(conversation, :runner_pid)
+    already_connected = socket.assigns.conversation_name == name
 
     try do
-      if connected?(socket) do
+      if connected?(socket) and not already_connected do
         Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
 
         if runner_pid,
@@ -325,7 +342,9 @@ defmodule ElixirAiWeb.VoiceLive do
           page_tools = discover_and_build_page_tools(socket, runner_pid)
 
           if page_tools != [] do
-            ChatRunner.register_page_tools(name, page_tools)
+            # Use the direct pid rather than the registry name to avoid
+            # Horde delta-CRDT sync lag on freshly-created processes.
+            GenServer.call(runner_pid, {:session, {:register_page_tools, page_tools}})
           end
         end
 
