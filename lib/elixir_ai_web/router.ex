@@ -4,6 +4,7 @@ defmodule ElixirAiWeb.Router do
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
+    plug ElixirAiWeb.Plugs.VoiceSessionId
     plug :fetch_live_flash
     plug :put_root_layout, html: {ElixirAiWeb.Layouts, :root}
     plug :protect_from_forgery

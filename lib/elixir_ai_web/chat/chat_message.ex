@@ -39,7 +39,7 @@ defmodule ElixirAiWeb.ChatMessage do
   def user_message(assigns) do
     ~H"""
     <div class="mb-2 text-sm text-right">
-      <div class={"w-fit px-3 py-2 rounded-lg  bg-seafoam-950 text-seafoam-50 #{max_width_class()} text-left"}>
+      <div class={"ml-auto w-fit px-3 py-2 rounded-lg  bg-seafoam-950 text-seafoam-50 #{max_width_class()} text-left"}>
         {@content}
       </div>
     </div>

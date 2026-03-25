@@ -111,7 +111,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
                                                                     {failed, pending} ->
         with {:ok, decoded_args} <- Jason.decode(tool_call.arguments),
              tool when not is_nil(tool) <-
-               Enum.find(state.server_tools ++ state.liveview_tools, fn t ->
+               Enum.find(state.server_tools ++ state.liveview_tools ++ state.page_tools, fn t ->
                  t.name == tool_call.name
                end) do
           tool.run_function.(id, tool_call.id, decoded_args)
@@ -160,7 +160,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       ElixirAi.ChatUtils.request_ai_response(
         self(),
         messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
-        state.server_tools ++ state.liveview_tools,
+        state.server_tools ++ state.liveview_tools ++ state.page_tools,
         state.provider,
         state.tool_choice
       )

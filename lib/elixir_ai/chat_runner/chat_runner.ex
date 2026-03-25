@@ -50,6 +50,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:session, {:deregister_liveview_pid, liveview_pid}})
   end
 
+  def register_page_tools(name, page_tools) when is_list(page_tools) do
+    GenServer.call(via(name), {:session, {:register_page_tools, page_tools}})
+  end
+
   def get_conversation(name) do
     GenServer.call(via(name), {:conversation, :get_conversation})
   end
@@ -130,6 +134,7 @@ defmodule ElixirAi.ChatRunner do
        tool_choice: tool_choice,
        server_tools: server_tools,
        liveview_tools: liveview_tools,
+       page_tools: [],
        provider: provider,
        liveview_pids: %{}
      }}

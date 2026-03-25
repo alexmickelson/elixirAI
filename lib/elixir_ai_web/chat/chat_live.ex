@@ -1,5 +1,6 @@
 defmodule ElixirAiWeb.ChatLive do
   use ElixirAiWeb, :live_view
+  use ElixirAi.AiControllable
   require Logger
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.ChatMessage
@@ -7,6 +8,38 @@ defmodule ElixirAiWeb.ChatLive do
   alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
   import ElixirAi.PubsubTopics
 
+  @impl ElixirAi.AiControllable
+  def ai_tools do
+    [
+      %{
+        name: "set_user_input",
+        description:
+          "Set the text in the chat input field. Use this to pre-fill a message for the user. " <>
+            "The user will still need to press Send (or you can describe what you filled in).",
+        parameters: %{
+          "type" => "object",
+          "properties" => %{
+            "text" => %{
+              "type" => "string",
+              "description" => "The text to place in the chat input field"
+            }
+          },
+          "required" => ["text"]
+        }
+      }
+    ]
+  end
+
+  @impl ElixirAi.AiControllable
+  def handle_ai_tool_call("set_user_input", %{"text" => text}, socket) do
+    {"user input set to: #{text}", assign(socket, user_input: text)}
+  end
+
+  def handle_ai_tool_call(_tool_name, _args, socket) do
+    {"unknown tool", socket}
+  end
+
+  @impl Phoenix.LiveView
   def mount(%{"name" => name}, _session, socket) do
     case ConversationManager.open_conversation(name) do
       {:ok, conversation} ->
@@ -50,6 +83,7 @@ defmodule ElixirAiWeb.ChatLive do
     end
   end
 
+  @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
     <div class="flex flex-col h-full  rounded-lg">
@@ -119,6 +153,7 @@ defmodule ElixirAiWeb.ChatLive do
     """
   end
 
+  @impl Phoenix.LiveView
   def handle_event("update_user_input", %{"user_input" => user_input}, socket) do
     {:noreply, assign(socket, user_input: user_input)}
   end
@@ -293,6 +328,7 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, background_color: color)}
   end
 
+  @impl Phoenix.LiveView
   def terminate(_reason, %{assigns: %{conversation_name: name}} = socket) do
     if connected?(socket) do
       ChatRunner.deregister_liveview_pid(name, self())

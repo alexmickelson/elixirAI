@@ -10,6 +10,10 @@ defmodule ElixirAi.ChatRunner.LiveviewSession do
     {:reply, :ok, %{state | liveview_pids: Map.put(state.liveview_pids, liveview_pid, ref)}}
   end
 
+  def handle_call({:register_page_tools, page_tools}, _from, state) do
+    {:reply, :ok, %{state | page_tools: page_tools}}
+  end
+
   def handle_call({:deregister_liveview_pid, liveview_pid}, _from, state) do
     case Map.pop(state.liveview_pids, liveview_pid) do
       {nil, _} ->

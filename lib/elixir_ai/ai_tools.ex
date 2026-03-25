@@ -127,6 +127,42 @@ defmodule ElixirAi.AiTools do
   end
 
   # ---------------------------------------------------------------------------
+  # Page tools (dynamic, from AiControllable LiveViews)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Builds tool structs for page tools discovered from AiControllable LiveViews.
+
+  Each entry in `pids_and_specs` is `{page_pid, [tool_spec, ...]}` where
+  `tool_spec` is a map with `:name`, `:description`, and `:parameters`.
+
+  The generated function sends `{:page_tool_call, name, args, self()}` to
+  the page LiveView pid and blocks (inside a Task) waiting for the reply.
+  """
+  def build_page_tools(server, pids_and_specs) do
+    Enum.flat_map(pids_and_specs, fn {page_pid, tool_specs} ->
+      Enum.map(tool_specs, fn spec ->
+        ai_tool(
+          name: spec.name,
+          description: spec.description,
+          function: fn args ->
+            send(page_pid, {:page_tool_call, spec.name, args, self()})
+
+            receive do
+              {:page_tool_result, tool_name, result} when tool_name == spec.name ->
+                {:ok, result}
+            after
+              5_000 -> {:ok, "page tool #{spec.name} timed out"}
+            end
+          end,
+          parameters: spec.parameters,
+          server: server
+        )
+      end)
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
   # Private
   # ---------------------------------------------------------------------------
 

@@ -4,10 +4,12 @@ defmodule ElixirAiWeb.VoiceLive do
 
   alias ElixirAiWeb.Voice.Recording
   alias ElixirAiWeb.Voice.VoiceConversation
-  alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
+  alias ElixirAi.{AiProvider, AiTools, ChatRunner, ConversationManager}
   import ElixirAi.PubsubTopics
 
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
+    voice_session_id = session["voice_session_id"]
+
     {:ok,
      assign(socket,
        state: :idle,
@@ -17,7 +19,8 @@ defmodule ElixirAiWeb.VoiceLive do
        messages: [],
        streaming_response: nil,
        runner_pid: nil,
-       ai_error: nil
+       ai_error: nil,
+       voice_session_id: voice_session_id
      ), layout: false}
   end
 
@@ -98,7 +101,10 @@ defmodule ElixirAiWeb.VoiceLive do
     if name do
       if socket.assigns.runner_pid do
         try do
-          GenServer.call(socket.assigns.runner_pid, {:session, {:deregister_liveview_pid, self()}})
+          GenServer.call(
+            socket.assigns.runner_pid,
+            {:session, {:deregister_liveview_pid, self()}}
+          )
         catch
           :exit, _ -> :ok
         end
@@ -307,30 +313,51 @@ defmodule ElixirAiWeb.VoiceLive do
   defp connect_and_send(socket, name, conversation, transcription) do
     runner_pid = Map.get(conversation, :runner_pid)
 
-    if connected?(socket) do
-      Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
+    try do
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
 
-      if runner_pid,
-        do: GenServer.call(runner_pid, {:session, {:register_liveview_pid, self()}})
+        if runner_pid,
+          do: GenServer.call(runner_pid, {:session, {:register_liveview_pid, self()}})
 
-      send(self(), :sync_streaming)
+        # Discover and register page tools from AiControllable LiveViews
+        if runner_pid do
+          page_tools = discover_and_build_page_tools(socket, runner_pid)
+
+          if page_tools != [] do
+            ChatRunner.register_page_tools(name, page_tools)
+          end
+        end
+
+        send(self(), :sync_streaming)
+      end
+
+      if runner_pid do
+        GenServer.cast(runner_pid, {:conversation, {:user_message, transcription, nil}})
+      else
+        ChatRunner.new_user_message(name, transcription)
+      end
+
+      assign(socket,
+        state: :transcribed,
+        transcription: transcription,
+        conversation_name: name,
+        messages: conversation.messages,
+        streaming_response: conversation.streaming_response,
+        runner_pid: runner_pid,
+        ai_error: nil
+      )
+    catch
+      :exit, reason ->
+        Logger.error("VoiceLive: failed to connect to conversation #{name}: #{inspect(reason)}")
+
+        assign(socket,
+          state: :transcribed,
+          transcription: transcription,
+          conversation_name: nil,
+          ai_error: "Failed to connect to conversation: process unavailable"
+        )
     end
-
-    if runner_pid do
-      GenServer.cast(runner_pid, {:conversation, {:user_message, transcription, nil}})
-    else
-      ChatRunner.new_user_message(name, transcription)
-    end
-
-    assign(socket,
-      state: :transcribed,
-      transcription: transcription,
-      conversation_name: name,
-      messages: conversation.messages,
-      streaming_response: conversation.streaming_response,
-      runner_pid: runner_pid,
-      ai_error: nil
-    )
   end
 
   defp get_snapshot(%{assigns: %{runner_pid: pid}}) when is_pid(pid) do
@@ -342,5 +369,34 @@ defmodule ElixirAiWeb.VoiceLive do
 
   defp get_snapshot(_socket) do
     %{id: nil, content: "", reasoning_content: "", tool_calls: []}
+  end
+
+  defp discover_and_build_page_tools(socket, runner_pid) do
+    voice_session_id = socket.assigns.voice_session_id
+    if voice_session_id == nil, do: throw(:no_session)
+
+    page_pids =
+      try do
+        :pg.get_members(ElixirAi.PageToolsPG, {:page, voice_session_id})
+      catch
+        :error, _ -> []
+      end
+
+    # Ask each page LiveView for its tool specs
+    Enum.each(page_pids, &send(&1, {:get_ai_tools, self()}))
+
+    pids_and_specs =
+      Enum.reduce(page_pids, [], fn page_pid, acc ->
+        receive do
+          {:ai_tools_response, ^page_pid, tools} ->
+            [{page_pid, tools} | acc]
+        after
+          1_000 -> acc
+        end
+      end)
+
+    AiTools.build_page_tools(runner_pid, pids_and_specs)
+  catch
+    :no_session -> []
   end
 end
