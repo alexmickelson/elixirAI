@@ -1,108 +1,129 @@
 defmodule ElixirAiWeb.AdminLive do
+  import ElixirAi.PubsubTopics
   use ElixirAiWeb, :live_view
   require Logger
 
-  @refresh_ms 1_000
-
   def mount(_params, _session, socket) do
-    if connected?(socket) do
-      :net_kernel.monitor_nodes(true)
-      :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
-      schedule_refresh()
-    end
+    socket =
+      if connected?(socket) do
+        :net_kernel.monitor_nodes(true)
+        # Join before monitoring so our own join doesn't trigger a spurious refresh.
+        :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
+        {pg_ref, _} = :pg.monitor_scope(ElixirAi.LiveViewPG)
+        {runner_pg_ref, _} = :pg.monitor_scope(ElixirAi.RunnerPG)
+        {singleton_pg_ref, _} = :pg.monitor_scope(ElixirAi.SingletonPG)
 
-    {:ok, assign(socket, cluster_info: gather_info())}
+        socket
+        |> assign(pg_ref: pg_ref)
+        |> assign(runner_pg_ref: runner_pg_ref)
+        |> assign(singleton_pg_ref: singleton_pg_ref)
+      else
+        assign(socket, pg_ref: nil, runner_pg_ref: nil, singleton_pg_ref: nil)
+      end
+
+    {:ok,
+     socket
+     |> assign(nodes: gather_node_statuses())
+     |> assign(singleton_locations: gather_singleton_locations())
+     |> assign(chat_runners: gather_chat_runners())
+     |> assign(liveviews: gather_liveviews())}
   end
 
   def handle_info({:nodeup, _node}, socket) do
-    {:noreply, assign(socket, cluster_info: gather_info())}
+    {:noreply, assign(socket, nodes: gather_node_statuses())}
   end
 
   def handle_info({:nodedown, _node}, socket) do
-    {:noreply, assign(socket, cluster_info: gather_info())}
+    {:noreply, assign(socket, nodes: gather_node_statuses())}
   end
 
-  def handle_info(:refresh, socket) do
-    schedule_refresh()
-    {:noreply, assign(socket, cluster_info: gather_info())}
+  def handle_info(:refresh_singletons, socket) do
+    {:noreply, assign(socket, singleton_locations: gather_singleton_locations())}
   end
 
-  defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_ms)
+  def handle_info({ref, change, _group, _pids}, %{assigns: %{singleton_pg_ref: ref}} = socket)
+      when is_reference(ref) and change in [:join, :leave] do
+    {:noreply, assign(socket, singleton_locations: gather_singleton_locations())}
+  end
 
-  defp gather_info do
-    import ElixirAi.PubsubTopics
+  def handle_info({ref, change, _group, _pids}, %{assigns: %{pg_ref: ref}} = socket)
+      when is_reference(ref) and change in [:join, :leave] do
+    {:noreply, assign(socket, liveviews: gather_liveviews())}
+  end
 
+  def handle_info({ref, change, _group, _pids}, %{assigns: %{runner_pg_ref: ref}} = socket)
+      when is_reference(ref) and change in [:join, :leave] do
+    {:noreply, assign(socket, chat_runners: gather_chat_runners())}
+  end
+
+  defp gather_node_statuses do
     all_nodes = [Node.self() | Node.list()]
-    configured = ElixirAi.ClusterSingleton.configured_singletons()
 
-    node_statuses =
-      Enum.map(all_nodes, fn node ->
-        status =
-          if node == Node.self() do
-            try do
-              ElixirAi.ClusterSingleton.status()
-            catch
-              _, _ -> :unreachable
-            end
-          else
-            case :rpc.call(node, ElixirAi.ClusterSingleton, :status, [], 3_000) do
-              {:badrpc, _} -> :unreachable
-              result -> result
-            end
+    Enum.map(all_nodes, fn node ->
+      status =
+        if node == Node.self() do
+          try do
+            ElixirAi.ClusterSingleton.status()
+          catch
+            _, _ -> :unreachable
           end
-
-        {node, status}
-      end)
-
-    singleton_locations =
-      Enum.map(configured, fn module ->
-        location =
-          case Horde.Registry.lookup(ElixirAi.ChatRegistry, module) do
-            [{pid, _}] -> node(pid)
-            _ -> nil
+        else
+          case :rpc.call(node, ElixirAi.ClusterSingleton, :status, [], 3_000) do
+            {:badrpc, _} -> :unreachable
+            result -> result
           end
+        end
 
-        {module, location}
-      end)
+      {node, status}
+    end)
+  end
 
-    # All ChatRunner entries in the distributed registry, keyed by conversation name.
-    # Each entry is a {name, node, pid, supervisor_node} tuple.
-    chat_runners =
-      Horde.DynamicSupervisor.which_children(ElixirAi.ChatRunnerSupervisor)
+  defp gather_singleton_locations do
+    running =
+      :pg.which_groups(ElixirAi.SingletonPG)
       |> Enum.flat_map(fn
-        {_, pid, _, _} when is_pid(pid) ->
-          case Horde.Registry.select(ElixirAi.ChatRegistry, [
-                 {{:"$1", pid, :"$2"}, [], [{{:"$1", pid, :"$2"}}]}
-               ]) do
-            [{name, ^pid, _}] when is_binary(name) -> [{name, node(pid), pid}]
+        {:singleton, module} ->
+          case :pg.get_members(ElixirAi.SingletonPG, {:singleton, module}) do
+            [pid | _] -> [{module, node(pid)}]
             _ -> []
           end
 
         _ ->
           []
       end)
-      |> Enum.sort_by(&elem(&1, 0))
+      |> Map.new()
 
-    # :pg is cluster-wide — one local call returns members from all nodes.
-    # Processes are automatically removed from their group when they die.
-    liveviews =
-      :pg.which_groups(ElixirAi.LiveViewPG)
-      |> Enum.flat_map(fn
-        {:liveview, view} ->
-          :pg.get_members(ElixirAi.LiveViewPG, {:liveview, view})
-          |> Enum.map(fn pid -> {view, node(pid)} end)
+    ElixirAi.ClusterSingleton.configured_singletons()
+    |> Enum.map(fn module -> {module, Map.get(running, module)} end)
+  end
 
-        _ ->
-          []
-      end)
+  # All ChatRunner entries via :pg membership, keyed by conversation name.
+  # Each entry is a {name, node, pid} tuple.
+  defp gather_chat_runners do
+    :pg.which_groups(ElixirAi.RunnerPG)
+    |> Enum.flat_map(fn
+      {:runner, name} ->
+        :pg.get_members(ElixirAi.RunnerPG, {:runner, name})
+        |> Enum.map(fn pid -> {name, node(pid), pid} end)
 
-    %{
-      nodes: node_statuses,
-      configured_singletons: configured,
-      singleton_locations: singleton_locations,
-      chat_runners: chat_runners,
-      liveviews: liveviews
-    }
+      _ ->
+        []
+    end)
+    |> Enum.sort_by(&elem(&1, 0))
+  end
+
+  # :pg is cluster-wide — one local call returns members from all nodes.
+  # Processes are automatically removed from their group when they die.
+  defp gather_liveviews do
+    :pg.which_groups(ElixirAi.LiveViewPG)
+    |> Enum.flat_map(fn
+      {:liveview, view} ->
+        :pg.get_members(ElixirAi.LiveViewPG, {:liveview, view})
+        |> Enum.map(fn pid -> {view, node(pid)} end)
+
+      _ ->
+        []
+    end)
   end
 
   def render(assigns) do
@@ -111,13 +132,13 @@ defmodule ElixirAiWeb.AdminLive do
       <h1 class="text-lg font-semibold text-seafoam-200 tracking-wide">Cluster Admin</h1>
 
       <div class="grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-        <%= for {node, status} <- @cluster_info.nodes do %>
+        <%= for {node, status} <- @nodes do %>
           <% node_singletons =
-            Enum.filter(@cluster_info.singleton_locations, fn {_, loc} -> loc == node end) %>
+            Enum.filter(@singleton_locations, fn {_, loc} -> loc == node end) %>
           <% node_runners =
-            Enum.filter(@cluster_info.chat_runners, fn {_, rnode, _} -> rnode == node end) %>
+            Enum.filter(@chat_runners, fn {_, rnode, _} -> rnode == node end) %>
           <% node_liveviews =
-            @cluster_info.liveviews
+            @liveviews
             |> Enum.filter(fn {_, n} -> n == node end)
             |> Enum.group_by(fn {view, _} -> view end) %>
 
@@ -126,7 +147,9 @@ defmodule ElixirAiWeb.AdminLive do
               <div class="flex items-center gap-2">
                 <span class="font-mono text-sm font-semibold text-seafoam-200">{node}</span>
                 <%= if node == Node.self() do %>
-                  <span class="text-xs bg-seafoam-800/50 text-seafoam-400 px-1.5 py-0.5 rounded">self</span>
+                  <span class="text-xs bg-seafoam-800/50 text-seafoam-400 px-1.5 py-0.5 rounded">
+                    self
+                  </span>
                 <% end %>
               </div>
               <.status_badge status={status} />
@@ -191,7 +214,7 @@ defmodule ElixirAiWeb.AdminLive do
       </div>
 
       <% unlocated =
-        Enum.filter(@cluster_info.singleton_locations, fn {_, loc} -> is_nil(loc) end) %>
+        Enum.filter(@singleton_locations, fn {_, loc} -> is_nil(loc) end) %>
       <%= if unlocated != [] do %>
         <section>
           <h2 class="text-xs font-semibold uppercase tracking-widest text-red-500 mb-2">
@@ -207,7 +230,9 @@ defmodule ElixirAiWeb.AdminLive do
         </section>
       <% end %>
 
-      <p class="text-xs text-seafoam-800">Refreshes every 1s or on node events.</p>
+      <p class="text-xs text-seafoam-800">
+        Nodes, singletons, liveviews &amp; runners all refresh on membership changes.
+      </p>
     </div>
     """
   end

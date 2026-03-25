@@ -20,6 +20,7 @@ defmodule ElixirAi.ConversationManager do
 
   def init(_) do
     Logger.info("ConversationManager initializing...")
+    :pg.join(ElixirAi.SingletonPG, {:singleton, __MODULE__}, self())
     send(self(), :load_conversations)
     {:ok, %{conversations: :loading, subscriptions: MapSet.new(), runners: %{}}}
   end

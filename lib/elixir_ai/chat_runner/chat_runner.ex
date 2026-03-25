@@ -68,6 +68,7 @@ defmodule ElixirAi.ChatRunner do
 
   def init(name) do
     Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
+    :pg.join(ElixirAi.RunnerPG, {:runner, name}, self())
 
     messages =
       case Conversation.find_id(name) do
