@@ -3,20 +3,10 @@ defmodule ElixirAi.Application do
   use Application
 
   def start(_type, _args) do
-    children =
-      case Application.get_env(:elixir_ai, :env) do
-        :tools_api -> tools_api_children()
-        _ -> full_children()
-      end
+    children = full_children()
 
     opts = [strategy: :one_for_one, name: ElixirAi.Supervisor]
     Supervisor.start_link(children, opts)
-  end
-
-  defp tools_api_children do
-    [
-      {ElixirAiCommandTool.Application, []}
-    ]
   end
 
   defp full_children do

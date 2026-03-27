@@ -34,7 +34,6 @@ services:
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
       WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
-      COMMAND_TOOL_URL: http://command_runner:4001
     user: root
     command: |
       sh -c '
@@ -46,6 +45,7 @@ services:
       - .:/app
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "4001:4000"
     depends_on:
@@ -77,7 +77,6 @@ services:
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
       WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
-      COMMAND_TOOL_URL: http://command_runner:4001
     user: root
     command: |
       sh -c '
@@ -89,6 +88,7 @@ services:
       - .:/app
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "4002:4000"
     depends_on:
@@ -102,33 +102,15 @@ services:
 
   command_runner:
     build:
-      context: .
-      dockerfile: lib/elixir_ai_command_tool/Dockerfile
+      context: ./sandbox
+      dockerfile: Dockerfile
     container_name: command_runner
     hostname: command_runner
-    environment:
-      COMMAND_TOOL_PORT: 4001
-    expose:
-      - "4001"
     healthcheck:
-      test:
-        [
-          "CMD",
-          "curl",
-          "-sf",
-          "http://localhost:4001/api/execute",
-          "-X",
-          "POST",
-          "-H",
-          "Content-Type: application/json",
-          "-d",
-          '{"command":"echo","args":["health"]}',
-          "-o",
-          "/dev/null",
-        ]
+      test: ["CMD", "echo", "ok"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
 
   nginx:
     image: nginx:alpine

@@ -62,6 +62,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:conversation, :get_streaming_response})
   end
 
+  def approval_decision(name, ref, decision) do
+    GenServer.cast(via(name), {:approval_decision, ref, decision})
+  end
+
   def start_link(name: name) do
     GenServer.start_link(__MODULE__, name, name: via(name))
   end
@@ -77,6 +81,7 @@ defmodule ElixirAi.ChatRunner do
        system_prompt: nil,
        streaming_response: nil,
        pending_tool_calls: [],
+       pending_approvals: %{},
        allowed_tools: AiTools.all_tool_names(),
        tool_choice: "auto",
        server_tools: [],
@@ -170,6 +175,17 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_cast({:conversation, inner}, state), do: ConversationCalls.handle_cast(inner, state)
 
+  def handle_cast({:approval_decision, ref, decision}, state) do
+    case Map.pop(state.pending_approvals, ref) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {pid, new_approvals} ->
+        send(pid, {:approval_response, ref, decision})
+        {:noreply, %{state | pending_approvals: new_approvals}}
+    end
+  end
+
   def handle_info(
         {:stream, msg},
         %{streaming_response: %{id: current_id}} = state
@@ -185,6 +201,10 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_info({:stream, inner}, state), do: StreamHandler.handle(inner, state)
   def handle_info({:error, inner}, state), do: ErrorHandler.handle(inner, state)
+
+  def handle_info({:register_pending_approval, ref, pid}, state) do
+    {:noreply, put_in(state, [:pending_approvals, ref], pid)}
+  end
 
   def handle_info({:DOWN, ref, :process, pid, reason}, state),
     do: LiveviewSession.handle_down(ref, pid, reason, state)

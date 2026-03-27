@@ -18,7 +18,7 @@ defmodule ElixirAi.AiTools do
 
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
 
-  @server_tool_names ["store_thing", "read_thing", "list_conversations", "run_command"]
+  @server_tool_names ["store_thing", "read_thing", "list_conversations", "run"]
   @liveview_tool_names ["set_background_color", "navigate_to"]
   @all_tool_names @server_tool_names ++ @liveview_tool_names
 
@@ -29,7 +29,7 @@ defmodule ElixirAi.AiTools do
   def all_tool_names, do: @all_tool_names
 
   def build_server_tools(server, allowed_names) do
-    [store_thing(server), read_thing(server), list_conversations(server), run_command(server)]
+    [store_thing(server), read_thing(server), list_conversations(server), run(server)]
     |> Enum.filter(&(&1.name in allowed_names))
   end
 
@@ -84,23 +84,40 @@ defmodule ElixirAi.AiTools do
     )
   end
 
-  def run_command(server) do
+  def run(server) do
     ai_tool(
-      name: "run_command",
+      name: "run",
       description: """
-      Execute a shell command in the sandboxed runner container.
-      Output is truncated if it exceeds size limits.
-      Returns stdout, stderr, and the exit code.
+      Execute a command in the sandboxed container. Supports full bash syntax
+      including pipes (|), chains (&&, ||), semicolons (;), and redirects.
+
+      One call can be a complete workflow:
+        cat log.txt | grep ERROR | wc -l
+        curl -sL $URL -o data.csv && head -5 data.csv
+        cat config.yaml || echo "not found, using defaults"
+
+      Available tools in the sandbox:
+        cat, head, tail, less     — read files
+        grep, sed, awk            — filter and transform text
+        sort, uniq, wc, tr, cut   — text processing
+        find, ls, tree, file      — explore filesystem
+        curl, wget                — fetch URLs
+        jq                        — parse JSON
+        git                       — version control
+        bash                      — scripting
+
+      Use --help on any command for detailed usage (e.g. "grep --help").
+      Large outputs are automatically truncated with a path to the full file.
       """,
       function: fn args ->
         command = Map.fetch!(args, "command")
 
-        case ElixirAiCommandTool.Http.Client.run_bash(command) do
-          {:ok, result} ->
-            {:ok, ElixirAiCommandTool.Http.Client.format_result(result)}
+        case ElixirAi.CommandApproval.classify(command) do
+          :auto_allow ->
+            execute_command(command)
 
-          {:error, reason} ->
-            {:ok, "runner error: #{reason}"}
+          {:needs_approval, reason} ->
+            request_approval(server, command, reason)
         end
       end,
       parameters: %{
@@ -109,13 +126,47 @@ defmodule ElixirAi.AiTools do
           "command" => %{
             "type" => "string",
             "description" =>
-              "The shell command to execute (e.g. \"ls -la\", \"cat file.txt | grep foo\", \"echo hello > out.txt\")"
+              "Shell command to execute (e.g. \"ls -la\", \"cat file.txt | grep foo\")"
           }
         },
         "required" => ["command"]
       },
       server: server
     )
+  end
+
+  defp execute_command(command) do
+    case ElixirAi.CommandRunner.run_bash(command) do
+      {:ok, result} ->
+        {:ok, ElixirAi.CommandRunner.Presentation.format(result)}
+
+      {:error, reason} ->
+        {:ok, "[error] runner unavailable: #{reason}\n[exit:1 | 0ms]"}
+    end
+  end
+
+  defp request_approval(server, command, reason) do
+    ref = make_ref()
+    send(server, {:register_pending_approval, ref, self()})
+
+    name = :sys.get_state(server).name
+
+    Phoenix.PubSub.broadcast(
+      ElixirAi.PubSub,
+      "ai_chat:#{name}",
+      {:tool_approval_request, ref, command, reason}
+    )
+
+    receive do
+      {:approval_response, ^ref, :approved} ->
+        execute_command(command)
+
+      {:approval_response, ^ref, :denied} ->
+        {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}
+    after
+      120_000 ->
+        {:ok, "[denied] Approval timed out after 2 minutes: #{command}\n[exit:1 | 0ms]"}
+    end
   end
 
   # ---------------------------------------------------------------------------

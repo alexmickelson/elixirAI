@@ -58,6 +58,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(messages: [])
          |> assign(streaming_response: nil)
          |> assign(background_color: "bg-seafoam-950/30")
+         |> assign(pending_approvals: [])
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
@@ -76,6 +77,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(messages: [])
          |> assign(streaming_response: nil)
          |> assign(background_color: "bg-seafoam-950/30")
+         |> assign(pending_approvals: [])
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
@@ -129,6 +131,34 @@ defmodule ElixirAiWeb.ChatLive do
               />
           <% end %>
         <% end %>
+        <%= for approval <- @pending_approvals do %>
+          <div class="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-2">
+            <div class="flex items-start gap-3">
+              <div class="flex-shrink-0 text-amber-600">⚠️</div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-amber-800">Command requires approval</p>
+                <p class="text-xs text-amber-600 mt-0.5">{approval.reason}</p>
+                <pre class="mt-2 p-2 bg-amber-100 rounded text-sm font-mono text-amber-900 overflow-x-auto"><%= approval.command %></pre>
+                <div class="mt-3 flex gap-2">
+                  <button
+                    phx-click="approve_command"
+                    phx-value-ref={encode_ref(approval.ref)}
+                    class="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    Allow
+                  </button>
+                  <button
+                    phx-click="deny_command"
+                    phx-value-ref={encode_ref(approval.ref)}
+                    class="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% end %>
         <%= if @streaming_response do %>
           <.streaming_assistant_message
             content={@streaming_response.content}
@@ -173,6 +203,20 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
     ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
     {:noreply, assign(socket, user_input: "")}
+  end
+
+  def handle_event("approve_command", %{"ref" => ref_string}, socket) do
+    ref = decode_ref(ref_string)
+    ChatRunner.approval_decision(socket.assigns.conversation_name, ref, :approved)
+
+    {:noreply, update(socket, :pending_approvals, &Enum.reject(&1, fn a -> a.ref == ref end))}
+  end
+
+  def handle_event("deny_command", %{"ref" => ref_string}, socket) do
+    ref = decode_ref(ref_string)
+    ChatRunner.approval_decision(socket.assigns.conversation_name, ref, :denied)
+
+    {:noreply, update(socket, :pending_approvals, &Enum.reject(&1, fn a -> a.ref == ref end))}
   end
 
   def handle_info(
@@ -354,6 +398,14 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, assign(socket, background_color: color)}
   end
 
+  def handle_info({:tool_approval_request, ref, command, reason}, socket) do
+    approval = %{ref: ref, command: command, reason: reason, timestamp: DateTime.utc_now()}
+
+    {:noreply,
+     socket
+     |> update(:pending_approvals, &[approval | &1])}
+  end
+
   @impl Phoenix.LiveView
   def terminate(_reason, %{assigns: %{conversation_name: name}} = socket) do
     if connected?(socket) do
@@ -377,4 +429,8 @@ defmodule ElixirAiWeb.ChatLive do
       snapshot -> snapshot
     end
   end
+
+  defp encode_ref(ref), do: ref |> :erlang.term_to_binary() |> Base.url_encode64()
+
+  defp decode_ref(string), do: string |> Base.url_decode64!() |> :erlang.binary_to_term([:safe])
 end

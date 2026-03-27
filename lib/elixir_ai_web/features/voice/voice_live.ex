@@ -128,13 +128,30 @@ defmodule ElixirAiWeb.VoiceLive do
 
   # Transcription received — open conversation and send as user message
   def handle_info({:transcription_result, {:ok, text}}, socket) do
-    socket = start_voice_conversation(socket, text)
+    socket =
+      try do
+        start_voice_conversation(socket, text)
+      rescue
+        e ->
+          Logger.error(
+            "VoiceLive: unexpected error during voice conversation: #{Exception.message(e)}"
+          )
+
+          assign(socket,
+            state: :transcribed,
+            transcription: text,
+            ai_error: "Something went wrong: #{Exception.message(e)}"
+          )
+      end
+
     {:noreply, socket}
   end
 
   def handle_info({:transcription_result, {:error, reason}}, socket) do
     Logger.error("VoiceLive: transcription failed: #{inspect(reason)}")
-    {:noreply, assign(socket, state: :idle)}
+
+    {:noreply,
+     assign(socket, state: :transcribed, ai_error: "Transcription failed: #{inspect(reason)}")}
   end
 
   # --- Chat PubSub handlers (same pattern as ChatLive) ---
@@ -357,12 +374,24 @@ defmodule ElixirAiWeb.VoiceLive do
         ChatRunner.new_user_message(name, transcription)
       end
 
+      # For follow-up recordings, keep the messages already accumulated via
+      # PubSub; open_conversation only returns %{runner_pid: pid}.
+      existing_messages =
+        if already_connected,
+          do: socket.assigns.messages,
+          else: Map.get(conversation, :messages, [])
+
+      existing_streaming =
+        if already_connected,
+          do: socket.assigns.streaming_response,
+          else: Map.get(conversation, :streaming_response)
+
       assign(socket,
         state: :transcribed,
         transcription: transcription,
         conversation_name: name,
-        messages: conversation.messages,
-        streaming_response: conversation.streaming_response,
+        messages: existing_messages,
+        streaming_response: existing_streaming,
         runner_pid: runner_pid,
         ai_error: nil
       )
