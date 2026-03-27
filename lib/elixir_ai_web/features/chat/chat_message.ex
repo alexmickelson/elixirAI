@@ -9,9 +9,38 @@ defmodule ElixirAiWeb.ChatMessage do
   attr :tool_call_id, :string, required: true
 
   def tool_result_message(assigns) do
+    id = "tr-#{:erlang.phash2(assigns.tool_call_id)}"
+
+    truncated =
+      case assigns.content do
+        nil ->
+          nil
+
+        "" ->
+          nil
+
+        c ->
+          first_line = c |> String.split("\n", parts: 2) |> hd() |> String.trim()
+
+          if String.length(first_line) > 80,
+            do: String.slice(first_line, 0, 77) <> "\u2026",
+            else: first_line
+      end
+
+    assigns =
+      assigns
+      |> assign(:_id, id)
+      |> assign(:_truncated, truncated)
+
     ~H"""
     <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900/40 bg-seafoam-950/20 text-xs font-mono overflow-hidden"}>
-      <div class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900/40 bg-seafoam-900/10 text-seafoam-600">
+      <div
+        class="flex items-center gap-2 px-3 py-1.5 border-b border-seafoam-900/40 bg-seafoam-900/10 text-seafoam-600 cursor-pointer select-none"
+        phx-click={
+          JS.toggle_class("hidden", to: "##{@_id}-body")
+          |> JS.toggle_class("rotate-180", to: "##{@_id}-chevron")
+        }
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
@@ -24,10 +53,27 @@ defmodule ElixirAiWeb.ChatMessage do
             clip-rule="evenodd"
           />
         </svg>
-        <span class="text-seafoam-600/70 flex-1 truncate">tool result</span>
+        <span class="text-seafoam-600/70 shrink-0">tool result</span>
+        <span :if={@_truncated} class="text-seafoam-500/50 truncate flex-1 min-w-0 ml-1">
+          {@_truncated}
+        </span>
+        <span :if={!@_truncated} class="flex-1" />
+        <svg
+          id={"#{@_id}-chevron"}
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          class="w-3 h-3 shrink-0 mx-1 text-seafoam-700 transition-transform duration-200"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+            clip-rule="evenodd"
+          />
+        </svg>
         <span class="text-seafoam-800 text-[10px] truncate max-w-[12rem]">{@tool_call_id}</span>
       </div>
-      <div class="px-3 py-2">
+      <div id={"#{@_id}-body"} class="hidden px-3 py-2">
         <pre class="text-seafoam-500/70 whitespace-pre-wrap break-all">{@content}</pre>
       </div>
     </div>
@@ -344,7 +390,7 @@ defmodule ElixirAiWeb.ChatMessage do
         </span>
       </div>
       <div id={"#{@_id}-args"} class="hidden">
-        <.tool_call_args arguments={@arguments} />
+        <.tool_call_args arguments={@arguments} name={@name} />
       </div>
       <div :if={@state == :success} class="px-3 py-2">
         <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
@@ -377,6 +423,24 @@ defmodule ElixirAiWeb.ChatMessage do
   end
 
   attr :arguments, :any, default: nil
+  attr :name, :string, default: nil
+
+  defp tool_call_args(%{name: "run_command", arguments: args} = assigns)
+       when not is_nil(args) and args != "" do
+    assigns = assign(assigns, :_command, extract_command(args))
+
+    ~H"""
+    <div class="px-3 py-2 border-b border-seafoam-900/50">
+      <%= if @_command do %>
+        <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">command</div>
+        <pre class="text-seafoam-300 whitespace-pre-wrap break-all"><code>{@_command}</code></pre>
+      <% else %>
+        <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
+        <.json_display json={@arguments} />
+      <% end %>
+    </div>
+    """
+  end
 
   defp tool_call_args(%{arguments: args} = assigns) when not is_nil(args) and args != "" do
     ~H"""
@@ -388,6 +452,16 @@ defmodule ElixirAiWeb.ChatMessage do
   end
 
   defp tool_call_args(assigns), do: ~H""
+
+  defp extract_command(args) when is_binary(args) do
+    case Jason.decode(args) do
+      {:ok, %{"command" => cmd}} when is_binary(cmd) -> cmd
+      _ -> nil
+    end
+  end
+
+  defp extract_command(%{"command" => cmd}) when is_binary(cmd), do: cmd
+  defp extract_command(_), do: nil
 
   defp tool_call_icon(assigns) do
     ~H"""

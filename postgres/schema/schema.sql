@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS tool_response_messages (
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_text_messages_conversation   ON text_messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_text_messages_prev           ON text_messages(prev_message_id);
 CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_prev          ON tool_calls_request_messages(prev_message_id);
 CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_text_msg      ON tool_calls_request_messages(text_message_id);

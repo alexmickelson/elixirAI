@@ -70,37 +70,67 @@ defmodule ElixirAi.ChatRunner do
     Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
     :pg.join(ElixirAi.RunnerPG, {:runner, name}, self())
 
-    messages =
-      case Conversation.find_id(name) do
-        {:ok, conv_id} ->
-          Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))
+    {:ok,
+     %{
+       name: name,
+       messages: [],
+       system_prompt: nil,
+       streaming_response: nil,
+       pending_tool_calls: [],
+       allowed_tools: AiTools.all_tool_names(),
+       tool_choice: "auto",
+       server_tools: [],
+       liveview_tools: [],
+       page_tools: [],
+       provider: nil,
+       liveview_pids: %{},
+       loading: true
+     }, {:continue, :load_from_db}}
+  end
 
-        _ ->
-          []
-      end
+  @impl true
+  def handle_continue(:load_from_db, %{name: name} = state) do
+    # Run all DB lookups concurrently — these are independent queries
+    tasks = %{
+      messages:
+        Task.async(fn ->
+          case Conversation.find_id(name) do
+            {:ok, conv_id} ->
+              Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))
 
+            _ ->
+              []
+          end
+        end),
+      provider: Task.async(fn -> Conversation.find_provider(name) end),
+      allowed_tools: Task.async(fn -> Conversation.find_allowed_tools(name) end),
+      tool_choice: Task.async(fn -> Conversation.find_tool_choice(name) end),
+      category: Task.async(fn -> Conversation.find_category(name) end)
+    }
+
+    messages = Task.await(tasks.messages, 10_000)
     last_message = List.last(messages)
 
     provider =
-      case Conversation.find_provider(name) do
+      case Task.await(tasks.provider, 5_000) do
         {:ok, p} -> p
         _ -> nil
       end
 
     allowed_tools =
-      case Conversation.find_allowed_tools(name) do
+      case Task.await(tasks.allowed_tools, 5_000) do
         {:ok, tools} -> tools
         _ -> AiTools.all_tool_names()
       end
 
     tool_choice =
-      case Conversation.find_tool_choice(name) do
+      case Task.await(tasks.tool_choice, 5_000) do
         {:ok, tc} -> tc
         _ -> "auto"
       end
 
     system_prompt =
-      case Conversation.find_category(name) do
+      case Task.await(tasks.category, 5_000) do
         {:ok, category} -> SystemPrompts.for_category(category)
         _ -> nil
       end
@@ -124,20 +154,17 @@ defmodule ElixirAi.ChatRunner do
       )
     end
 
-    {:ok,
+    {:noreply,
      %{
-       name: name,
-       messages: messages,
-       system_prompt: system_prompt,
-       streaming_response: nil,
-       pending_tool_calls: [],
-       allowed_tools: allowed_tools,
-       tool_choice: tool_choice,
-       server_tools: server_tools,
-       liveview_tools: liveview_tools,
-       page_tools: [],
-       provider: provider,
-       liveview_pids: %{}
+       state
+       | messages: messages,
+         system_prompt: system_prompt,
+         allowed_tools: allowed_tools,
+         tool_choice: tool_choice,
+         server_tools: server_tools,
+         liveview_tools: liveview_tools,
+         provider: provider,
+         loading: false
      }}
   end
 

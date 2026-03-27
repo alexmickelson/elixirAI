@@ -18,7 +18,7 @@ defmodule ElixirAi.AiTools do
 
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
 
-  @server_tool_names ["store_thing", "read_thing", "list_conversations"]
+  @server_tool_names ["store_thing", "read_thing", "list_conversations", "run_command"]
   @liveview_tool_names ["set_background_color", "navigate_to"]
   @all_tool_names @server_tool_names ++ @liveview_tool_names
 
@@ -29,7 +29,7 @@ defmodule ElixirAi.AiTools do
   def all_tool_names, do: @all_tool_names
 
   def build_server_tools(server, allowed_names) do
-    [store_thing(server), read_thing(server), list_conversations(server)]
+    [store_thing(server), read_thing(server), list_conversations(server), run_command(server)]
     |> Enum.filter(&(&1.name in allowed_names))
   end
 
@@ -80,6 +80,40 @@ defmodule ElixirAi.AiTools do
         {:ok, names}
       end,
       parameters: %{"type" => "object", "properties" => %{}},
+      server: server
+    )
+  end
+
+  def run_command(server) do
+    ai_tool(
+      name: "run_command",
+      description: """
+      Execute a shell command in the sandboxed runner container.
+      Output is truncated if it exceeds size limits.
+      Returns stdout, stderr, and the exit code.
+      """,
+      function: fn args ->
+        command = Map.fetch!(args, "command")
+
+        case ElixirAiCommandTool.Http.Client.run_bash(command) do
+          {:ok, result} ->
+            {:ok, ElixirAiCommandTool.Http.Client.format_result(result)}
+
+          {:error, reason} ->
+            {:ok, "runner error: #{reason}"}
+        end
+      end,
+      parameters: %{
+        "type" => "object",
+        "properties" => %{
+          "command" => %{
+            "type" => "string",
+            "description" =>
+              "The shell command to execute (e.g. \"ls -la\", \"cat file.txt | grep foo\", \"echo hello > out.txt\")"
+          }
+        },
+        "required" => ["command"]
+      },
       server: server
     )
   end

@@ -42,23 +42,23 @@ defmodule ElixirAiWeb.ChatLive do
   @impl Phoenix.LiveView
   def mount(%{"name" => name}, _session, socket) do
     case ConversationManager.open_conversation(name) do
-      {:ok, conversation} ->
+      {:ok, %{runner_pid: pid}} ->
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
           ChatRunner.register_liveview_pid(name, self())
-          send(self(), :sync_streaming)
+          send(self(), :load_conversation)
         end
 
         {:ok,
          socket
          |> assign(conversation_name: name)
-         |> assign(runner_pid: Map.get(conversation, :runner_pid))
+         |> assign(runner_pid: pid)
          |> assign(user_input: "")
-         |> assign(messages: conversation.messages)
-         |> assign(streaming_response: conversation.streaming_response)
+         |> assign(messages: [])
+         |> assign(streaming_response: nil)
          |> assign(background_color: "bg-seafoam-950/30")
-         |> assign(provider: conversation.provider)
+         |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
          |> assign(ai_error: nil)}
@@ -138,12 +138,17 @@ defmodule ElixirAiWeb.ChatLive do
           <.spinner />
         <% end %>
       </div>
-      <form class="p-3 flex gap-2" phx-submit="submit" phx-change="update_user_input">
+      <form class="p-3 flex gap-2 items-center" phx-submit="submit" phx-change="update_user_input">
         <input
           type="text"
           name="user_input"
           value={@user_input}
           class="flex-1 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2"
+        />
+        <.live_component
+          module={ElixirAiWeb.ChatToolsLive}
+          id="chat-tools"
+          conversation_name={@conversation_name}
         />
         <button type="submit" class="px-4 py-2 rounded text-sm border">
           Send
@@ -168,6 +173,26 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
     ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
     {:noreply, assign(socket, user_input: "")}
+  end
+
+  def handle_info(
+        :load_conversation,
+        %{assigns: %{runner_pid: pid, conversation_name: name}} = socket
+      ) do
+    conversation = GenServer.call(pid, {:conversation, :get_conversation})
+
+    socket =
+      socket
+      |> assign(messages: conversation.messages)
+      |> assign(streaming_response: conversation.streaming_response)
+      |> assign(provider: conversation.provider)
+
+    # Now sync streaming state if there's an active stream
+    if conversation.streaming_response do
+      send(self(), :sync_streaming)
+    end
+
+    {:noreply, socket}
   end
 
   def handle_info(:recovery_restart, socket) do
@@ -268,11 +293,12 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:tool_request_message, tool_request_message}, socket) do
-    # Logger.info("tool request message: #{inspect(tool_request_message)}")
-
+    # Tool calls are now finalized in @messages — clear streaming_response so
+    # the streaming bubble doesn't render below the incoming tool results.
     {:noreply,
      socket
-     |> update(:messages, &(&1 ++ [tool_request_message]))}
+     |> update(:messages, &(&1 ++ [tool_request_message]))
+     |> assign(streaming_response: nil)}
   end
 
   def handle_info({:one_tool_finished, tool_response}, socket) do

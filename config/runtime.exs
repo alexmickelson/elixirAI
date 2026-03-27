@@ -3,11 +3,18 @@ import Dotenvy
 
 source!([".env", System.get_env()])
 
-config :elixir_ai,
-  ai_endpoint: System.get_env("AI_RESPONSES_ENDPOINT"),
-  ai_token: System.get_env("AI_TOKEN"),
-  ai_model: System.get_env("AI_MODEL"),
-  whisper_endpoint: System.get_env("WHISPER_ENDPOINT")
+# tools_api environment only needs the port — skip everything else
+if config_env() == :tools_api do
+  config :elixir_ai,
+    command_tool_port: String.to_integer(System.get_env("COMMAND_TOOL_PORT") || "4001")
+else
+  config :elixir_ai,
+    ai_endpoint: System.get_env("AI_RESPONSES_ENDPOINT"),
+    ai_token: System.get_env("AI_TOKEN"),
+    ai_model: System.get_env("AI_MODEL"),
+    whisper_endpoint: System.get_env("WHISPER_ENDPOINT"),
+    command_tool_url: System.get_env("COMMAND_TOOL_URL")
+end
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
