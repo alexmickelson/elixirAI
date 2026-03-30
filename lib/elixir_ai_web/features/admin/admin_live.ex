@@ -1,5 +1,4 @@
 defmodule ElixirAiWeb.AdminLive do
-  import ElixirAi.PubsubTopics
   use ElixirAiWeb, :live_view
   require Logger
 

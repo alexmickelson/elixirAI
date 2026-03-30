@@ -73,6 +73,7 @@ defmodule ElixirAiWeb.ChatLive do
         {:ok,
          socket
          |> assign(conversation_name: name)
+         |> assign(runner_pid: nil)
          |> assign(user_input: "")
          |> assign(messages: [])
          |> assign(streaming_response: nil)
@@ -179,6 +180,7 @@ defmodule ElixirAiWeb.ChatLive do
           module={ElixirAiWeb.ChatToolsLive}
           id="chat-tools"
           conversation_name={@conversation_name}
+          runner_pid={assigns[:runner_pid]}
         />
         <button type="submit" class="px-4 py-2 rounded text-sm border">
           Send

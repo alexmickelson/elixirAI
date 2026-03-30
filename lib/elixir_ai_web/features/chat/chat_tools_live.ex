@@ -9,8 +9,8 @@ defmodule ElixirAiWeb.ChatToolsLive do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:all_tools, fn -> AiTools.all_tool_names() end)
      |> assign_new(:allowed_tools, fn ->
-       case ChatRunner.get_conversation(assigns.conversation_name) do
-         %{allowed_tools: tools} -> tools
+       case get_allowed_tools(assigns) do
+         tools when is_list(tools) -> tools
          _ -> AiTools.all_tool_names()
        end
      end)}
@@ -102,4 +102,20 @@ defmodule ElixirAiWeb.ChatToolsLive do
     ChatRunner.set_allowed_tools(socket.assigns.conversation_name, new_allowed)
     {:noreply, assign(socket, allowed_tools: new_allowed)}
   end
+
+  defp get_allowed_tools(%{runner_pid: pid}) when is_pid(pid) do
+    case GenServer.call(pid, {:conversation, :get_conversation}) do
+      %{allowed_tools: tools} -> tools
+      _ -> nil
+    end
+  end
+
+  defp get_allowed_tools(%{conversation_name: name}) do
+    case ChatRunner.get_conversation(name) do
+      %{allowed_tools: tools} -> tools
+      _ -> nil
+    end
+  end
+
+  defp get_allowed_tools(_), do: nil
 end
