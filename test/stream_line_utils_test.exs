@@ -24,7 +24,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
       line = start_response("chatcmpl-test")
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:start_new_ai_response, "chatcmpl-test"}
+      assert_received {:stream, {:start_new_ai_response, "chatcmpl-test"}}
     end
 
     test "handles error response", %{server: server} do
@@ -61,7 +61,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
       line = reasoning_chunk("The")
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", "The"}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", "The"}}
     end
 
     test "handles multiple reasoning content chunks", %{server: server} do
@@ -75,9 +75,9 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
         StreamLineUtils.handle_stream_line(server, line)
       end
 
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", "The"}
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", " user"}
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", " asks"}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", "The"}}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", " user"}}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", " asks"}}
     end
   end
 
@@ -86,7 +86,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
       line = text_chunk("Hello")
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:ai_text_chunk, "chatcmpl-test", "Hello"}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", "Hello"}}
     end
 
     test "handles multiple text content chunks", %{server: server} do
@@ -100,16 +100,16 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
         StreamLineUtils.handle_stream_line(server, line)
       end
 
-      assert_received {:ai_text_chunk, "chatcmpl-test", "I"}
-      assert_received {:ai_text_chunk, "chatcmpl-test", "'m"}
-      assert_received {:ai_text_chunk, "chatcmpl-test", " happy"}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", "I"}}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", "'m"}}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", " happy"}}
     end
 
     test "handles finish_reason stop", %{server: server} do
       line = stop_chunk()
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:ai_text_stream_finish, "chatcmpl-test"}
+      assert_received {:stream, {:ai_text_stream_finish, "chatcmpl-test"}}
     end
   end
 
@@ -119,22 +119,25 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
 
       StreamLineUtils.handle_stream_line(server, line)
 
-      assert_received {:ai_tool_call_start, "chatcmpl-test",
-                       {"get_weather", ~s({"location), 0, "call_123"}}
+      assert_received {:stream,
+                       {:ai_tool_call_start, "chatcmpl-test",
+                        {"get_weather", ~s({"location), 0, "call_123"}}}
     end
 
     test "handles tool call middle", %{server: server} do
       line = tool_call_middle_chunk(~s(": "San Francisco"))
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:ai_tool_call_middle, "chatcmpl-test", {~s(": "San Francisco"), 0}}
+
+      assert_received {:stream,
+                       {:ai_tool_call_middle, "chatcmpl-test", {~s(": "San Francisco"), 0}}}
     end
 
     test "handles tool call end", %{server: server} do
       line = tool_call_end_chunk()
 
       StreamLineUtils.handle_stream_line(server, line)
-      assert_received {:ai_tool_call_end, "chatcmpl-test"}
+      assert_received {:stream, {:ai_tool_call_end, "chatcmpl-test"}}
     end
 
     test "handles complete tool call flow", %{server: server} do
@@ -142,18 +145,19 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
       start_line = tool_call_start_chunk("get_weather", ~s({"location), 0, "call_123")
       StreamLineUtils.handle_stream_line(server, start_line)
 
-      assert_received {:ai_tool_call_start, "chatcmpl-test",
-                       {"get_weather", ~s({"location), 0, "call_123"}}
+      assert_received {:stream,
+                       {:ai_tool_call_start, "chatcmpl-test",
+                        {"get_weather", ~s({"location), 0, "call_123"}}}
 
       # Middle of tool call
       middle_line = tool_call_middle_chunk(~s(": "NYC"}))
       StreamLineUtils.handle_stream_line(server, middle_line)
-      assert_received {:ai_tool_call_middle, "chatcmpl-test", {~s(": "NYC"}), 0}}
+      assert_received {:stream, {:ai_tool_call_middle, "chatcmpl-test", {~s(": "NYC"}), 0}}}
 
       # End tool call
       end_line = tool_call_end_chunk()
       StreamLineUtils.handle_stream_line(server, end_line)
-      assert_received {:ai_tool_call_end, "chatcmpl-test"}
+      assert_received {:stream, {:ai_tool_call_end, "chatcmpl-test"}}
     end
   end
 
@@ -161,25 +165,25 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
     test "handles complete conversation flow", %{server: server} do
       # Start
       StreamLineUtils.handle_stream_line(server, start_response())
-      assert_received {:start_new_ai_response, "chatcmpl-test"}
+      assert_received {:stream, {:start_new_ai_response, "chatcmpl-test"}}
 
       # Reasoning chunks
       StreamLineUtils.handle_stream_line(server, reasoning_chunk("Think"))
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", "Think"}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", "Think"}}
 
       StreamLineUtils.handle_stream_line(server, reasoning_chunk("ing..."))
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", "ing..."}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", "ing..."}}
 
       # Content chunks
       StreamLineUtils.handle_stream_line(server, text_chunk("Hello"))
-      assert_received {:ai_text_chunk, "chatcmpl-test", "Hello"}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", "Hello"}}
 
       StreamLineUtils.handle_stream_line(server, text_chunk(" world"))
-      assert_received {:ai_text_chunk, "chatcmpl-test", " world"}
+      assert_received {:stream, {:ai_text_chunk, "chatcmpl-test", " world"}}
 
       # End
       StreamLineUtils.handle_stream_line(server, stop_chunk())
-      assert_received {:ai_text_stream_finish, "chatcmpl-test"}
+      assert_received {:stream, {:ai_text_stream_finish, "chatcmpl-test"}}
 
       # Done marker
       StreamLineUtils.handle_stream_line(server, "data: [DONE]")
@@ -189,11 +193,11 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
     test "handles conversation with tool call", %{server: server} do
       # Start
       StreamLineUtils.handle_stream_line(server, start_response())
-      assert_received {:start_new_ai_response, "chatcmpl-test"}
+      assert_received {:stream, {:start_new_ai_response, "chatcmpl-test"}}
 
       # Reasoning
       StreamLineUtils.handle_stream_line(server, reasoning_chunk("Need to check weather"))
-      assert_received {:ai_reasoning_chunk, "chatcmpl-test", "Need to check weather"}
+      assert_received {:stream, {:ai_reasoning_chunk, "chatcmpl-test", "Need to check weather"}}
 
       # Tool call
       StreamLineUtils.handle_stream_line(
@@ -201,14 +205,15 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
         tool_call_start_chunk("get_weather", ~s({"loc), 0, "call_1")
       )
 
-      assert_received {:ai_tool_call_start, "chatcmpl-test",
-                       {"get_weather", ~s({"loc), 0, "call_1"}}
+      assert_received {:stream,
+                       {:ai_tool_call_start, "chatcmpl-test",
+                        {"get_weather", ~s({"loc), 0, "call_1"}}}
 
       StreamLineUtils.handle_stream_line(server, tool_call_middle_chunk(~s(ation"})))
-      assert_received {:ai_tool_call_middle, "chatcmpl-test", {~s(ation"}), 0}}
+      assert_received {:stream, {:ai_tool_call_middle, "chatcmpl-test", {~s(ation"}), 0}}}
 
       StreamLineUtils.handle_stream_line(server, tool_call_end_chunk())
-      assert_received {:ai_tool_call_end, "chatcmpl-test"}
+      assert_received {:stream, {:ai_tool_call_end, "chatcmpl-test"}}
 
       # Done
       StreamLineUtils.handle_stream_line(server, "data: [DONE]")

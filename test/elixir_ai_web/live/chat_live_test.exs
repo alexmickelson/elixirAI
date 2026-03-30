@@ -1,10 +1,13 @@
 defmodule ElixirAiWeb.ChatLiveTest do
   use ElixirAiWeb.ConnCase, async: false
   import ElixirAi.PubsubTopics, only: [chat_topic: 1]
+  import ElixirAi.TestCase, only: [start_test_conversation: 1]
 
   setup do
+    %{runner_pid: pid} = start_test_conversation("test_conv")
+
     stub(ElixirAi.ConversationManager, :open_conversation, fn _name ->
-      {:ok, %{messages: [], streaming_response: nil, provider: nil, runner_pid: nil}}
+      {:ok, %{runner_pid: pid}}
     end)
 
     :ok

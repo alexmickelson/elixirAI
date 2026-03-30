@@ -1,19 +1,8 @@
 defmodule ElixirAi.MessageStorageTest do
   use ElixirAi.TestCase
+  import ElixirAi.TestCase, only: [start_test_conversation: 1]
 
   setup do
-    # Default run_sql and request_ai_response stubs are set by TestCase.
-    # Start ConversationManager AFTER stubs are active so its :load_conversations
-    # handler sees the stub rather than hitting the real (absent) DB.
-    case Horde.DynamicSupervisor.start_child(
-           ElixirAi.ChatRunnerSupervisor,
-           ElixirAi.ConversationManager
-         ) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-      {:error, :already_present} -> :ok
-    end
-
     :ok
   end
 
@@ -29,39 +18,37 @@ defmodule ElixirAi.MessageStorageTest do
         String.contains?(sql, "SELECT id FROM conversations") ->
           [%{"id" => conv_id}]
 
-        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM messages m") and
-            String.contains?(sql, "LEFT JOIN assistant_message_details") ->
-          # Load messages query
+        String.contains?(sql, "FROM text_messages") and not String.contains?(sql, "INSERT") ->
+          # Load text messages query
           []
 
-        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM tool_calls") ->
+        String.contains?(sql, "FROM tool_calls_request_messages") and
+            not String.contains?(sql, "INSERT") ->
           # Load tool calls query
           []
 
-        String.contains?(sql, "SELECT") and String.contains?(sql, "FROM tool_responses") ->
+        String.contains?(sql, "FROM tool_response_messages") and
+            not String.contains?(sql, "INSERT") ->
           # Load tool responses query
           []
 
-        String.contains?(sql, "INSERT INTO messages") and String.contains?(sql, "RETURNING id") ->
+        String.contains?(sql, "INSERT INTO text_messages") and
+            String.contains?(sql, "RETURNING id") ->
           # Assistant message insert - return a fake message_id
           send(test_pid, {:insert_assistant_message, params})
           [%{"id" => 123}]
 
-        String.contains?(sql, "INSERT INTO messages") ->
+        String.contains?(sql, "INSERT INTO text_messages") ->
           # User message insert
           send(test_pid, {:insert_message, params})
           []
 
-        String.contains?(sql, "INSERT INTO tool_calls") ->
+        String.contains?(sql, "INSERT INTO tool_calls_request_messages") ->
           send(test_pid, {:insert_tool_call, params})
           []
 
-        String.contains?(sql, "INSERT INTO tool_responses") ->
+        String.contains?(sql, "INSERT INTO tool_response_messages") ->
           send(test_pid, {:insert_tool_response, params})
-          []
-
-        String.contains?(sql, "INSERT INTO assistant_message_details") ->
-          send(test_pid, {:insert_assistant_details, params})
           []
 
         true ->
@@ -72,8 +59,7 @@ defmodule ElixirAi.MessageStorageTest do
     # 4-arity version used by Conversation.all_names/0
     stub(ElixirAi.Data.DbHelpers, :run_sql, fn _sql, _params, _topic, _schema -> [] end)
 
-    provider_id = Ecto.UUID.generate()
-    {:ok, _pid} = ElixirAi.ConversationManager.create_conversation(conv_name, provider_id)
+    %{conv_name: conv_name} = start_test_conversation(conv_name)
     conv_name
   end
 
@@ -81,6 +67,14 @@ defmodule ElixirAi.MessageStorageTest do
     conv_name = setup_conversation()
 
     stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
+      :ok
+    end)
+
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server,
+                                                      _messages,
+                                                      _tools,
+                                                      _provider,
+                                                      _tool_choice ->
       :ok
     end)
 
@@ -96,9 +90,21 @@ defmodule ElixirAi.MessageStorageTest do
 
     stub(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools, _provider ->
       id = make_ref()
-      send(server, {:start_new_ai_response, id})
-      send(server, {:ai_text_chunk, id, "Hello from AI"})
-      send(server, {:ai_text_stream_finish, id})
+      send(server, {:stream, {:start_new_ai_response, id}})
+      send(server, {:stream, {:ai_text_chunk, id, "Hello from AI"}})
+      send(server, {:stream, {:ai_text_stream_finish, id}})
+      :ok
+    end)
+
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn server,
+                                                      _messages,
+                                                      _tools,
+                                                      _provider,
+                                                      _tool_choice ->
+      id = make_ref()
+      send(server, {:stream, {:start_new_ai_response, id}})
+      send(server, {:stream, {:ai_text_chunk, id, "Hello from AI"}})
+      send(server, {:stream, {:ai_text_stream_finish, id}})
       :ok
     end)
 
@@ -114,20 +120,33 @@ defmodule ElixirAi.MessageStorageTest do
     conv_name = setup_conversation()
 
     # First AI call triggers the tool; subsequent calls (after tool completes) are no-ops.
-    expect(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools, _provider ->
+    expect(ElixirAi.ChatUtils, :request_ai_response, fn server,
+                                                        _messages,
+                                                        _tools,
+                                                        _provider,
+                                                        _tool_choice ->
       id = make_ref()
-      send(server, {:start_new_ai_response, id})
+      send(server, {:stream, {:start_new_ai_response, id}})
 
       send(
         server,
-        {:ai_tool_call_start, id, {"store_thing", ~s({"name":"k","value":"v"}), 0, "tc_1"}}
+        {:stream,
+         {:ai_tool_call_start, id, {"store_thing", ~s({"name":"k","value":"v"}), 0, "tc_1"}}}
       )
 
-      send(server, {:ai_tool_call_end, id})
+      send(server, {:stream, {:ai_tool_call_end, id}})
       :ok
     end)
 
     stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
+      :ok
+    end)
+
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server,
+                                                      _messages,
+                                                      _tools,
+                                                      _provider,
+                                                      _tool_choice ->
       :ok
     end)
 

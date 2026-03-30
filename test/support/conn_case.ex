@@ -44,6 +44,14 @@ defmodule ElixirAiWeb.ConnCase do
       :ok
     end)
 
+    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server,
+                                                      _messages,
+                                                      _tools,
+                                                      _provider,
+                                                      _tool_choice ->
+      :ok
+    end)
+
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
 end

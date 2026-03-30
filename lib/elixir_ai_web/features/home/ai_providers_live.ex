@@ -57,7 +57,7 @@ defmodule ElixirAiWeb.AiProvidersLive do
             class="w-full px-4 py-2 rounded text-sm border border-seafoam-900/40 bg-seafoam-950/20 text-seafoam-300 hover:border-seafoam-700 hover:bg-seafoam-950/40 transition-colors"
           >
             Create Provider
-          </button>r
+          </button>
         </form>
       <% end %>
 

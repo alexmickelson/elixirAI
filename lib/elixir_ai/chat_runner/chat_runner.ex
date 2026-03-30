@@ -93,7 +93,6 @@ defmodule ElixirAi.ChatRunner do
      }, {:continue, :load_from_db}}
   end
 
-  @impl true
   def handle_continue(:load_from_db, %{name: name} = state) do
     # Run all DB lookups concurrently — these are independent queries
     tasks = %{

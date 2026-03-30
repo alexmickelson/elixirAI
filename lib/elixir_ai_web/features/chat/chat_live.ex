@@ -221,7 +221,7 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_info(
         :load_conversation,
-        %{assigns: %{runner_pid: pid, conversation_name: name}} = socket
+        %{assigns: %{runner_pid: pid, conversation_name: _name}} = socket
       ) do
     conversation = GenServer.call(pid, {:conversation, :get_conversation})
 
