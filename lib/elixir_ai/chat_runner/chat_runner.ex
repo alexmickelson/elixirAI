@@ -46,6 +46,11 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:session, {:register_liveview_pid, liveview_pid}})
   end
 
+  def register_liveview_pid_direct(runner_pid, liveview_pid)
+      when is_pid(runner_pid) and is_pid(liveview_pid) do
+    GenServer.call(runner_pid, {:session, {:register_liveview_pid, liveview_pid}})
+  end
+
   def deregister_liveview_pid(name, liveview_pid) when is_pid(liveview_pid) do
     GenServer.call(via(name), {:session, {:deregister_liveview_pid, liveview_pid}})
   end

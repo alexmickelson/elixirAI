@@ -46,7 +46,7 @@ defmodule ElixirAiWeb.ChatLive do
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
-          ChatRunner.register_liveview_pid(name, self())
+          ChatRunner.register_liveview_pid_direct(pid, self())
           send(self(), :load_conversation)
         end
 
