@@ -133,30 +133,27 @@ defmodule ElixirAiWeb.ChatLive do
           <% end %>
         <% end %>
         <%= for approval <- @pending_approvals do %>
-          <div class="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-2">
-            <div class="flex items-start gap-3">
-              <div class="flex-shrink-0 text-amber-600">⚠️</div>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-amber-800">Command requires approval</p>
-                <p class="text-xs text-amber-600 mt-0.5">{approval.reason}</p>
-                <pre class="mt-2 p-2 bg-amber-100 rounded text-sm font-mono text-amber-900 overflow-x-auto"><%= approval.command %></pre>
-                <div class="mt-3 flex gap-2">
-                  <button
-                    phx-click="approve_command"
-                    phx-value-ref={encode_ref(approval.ref)}
-                    class="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                  >
-                    Allow
-                  </button>
-                  <button
-                    phx-click="deny_command"
-                    phx-value-ref={encode_ref(approval.ref)}
-                    class="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                  >
-                    Deny
-                  </button>
-                </div>
-              </div>
+          <div class="mb-2 rounded-lg border border-amber-800/40 bg-amber-950/30 px-4 py-3">
+            <p class="text-xs font-semibold uppercase tracking-wide text-amber-400">
+              Command requires approval
+            </p>
+            <p class="mt-0.5 text-xs text-amber-600/80">{approval.reason}</p>
+            <pre class="mt-2 overflow-x-auto rounded bg-black/30 px-3 py-2 text-xs font-mono text-amber-300/80"><%= approval.command %></pre>
+            <div class="mt-3 flex gap-2">
+              <button
+                phx-click="approve_command"
+                phx-value-ref={encode_ref(approval.ref)}
+                class="rounded border border-seafoam-700/50 px-3 py-1.5 text-xs text-seafoam-300 transition-colors hover:bg-seafoam-900/40"
+              >
+                Allow
+              </button>
+              <button
+                phx-click="deny_command"
+                phx-value-ref={encode_ref(approval.ref)}
+                class="rounded border border-red-800/50 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-950/40"
+              >
+                Deny
+              </button>
             </div>
           </div>
         <% end %>
