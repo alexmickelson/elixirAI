@@ -15,71 +15,71 @@ jobs:
         with:
           clean: false
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # - name: Login to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push backend image
-        env:
-          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-        run: |
-          docker build -q -t alexmickelson/$IMAGE_NAME:$GITHUB_RUN_NUMBER .
-          docker push -q alexmickelson/$IMAGE_NAME:$GITHUB_RUN_NUMBER
+      # - name: Build and push backend image
+      #   env:
+      #     IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      #   run: |
+      #     docker build -q -t alexmickelson/$IMAGE_NAME:$GITHUB_RUN_NUMBER .
+      #     docker push -q alexmickelson/$IMAGE_NAME:$GITHUB_RUN_NUMBER
 
-      - name: Deploy to Kubernetes
-        env:
-          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
-          AI_TOKEN: ${{ secrets.AI_TOKEN }}
-          INGRESS_HOST: ${{ vars.INGRESS_HOST }}
-          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-        run: |
-          echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
-          export KUBECONFIG=/tmp/elixir-kubeconfig.yml
+      # - name: Deploy to Kubernetes
+      #   env:
+      #     KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
+      #     AI_TOKEN: ${{ secrets.AI_TOKEN }}
+      #     INGRESS_HOST: ${{ vars.INGRESS_HOST }}
+      #     IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      #   run: |
+      #     echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
+      #     export KUBECONFIG=/tmp/elixir-kubeconfig.yml
 
-          kubectl create namespace ai-ha-elixir --dry-run=client -o yaml | kubectl apply -f -
+      #     kubectl create namespace ai-ha-elixir --dry-run=client -o yaml | kubectl apply -f -
 
-          kubectl get secret ai-ha-elixir-secrets --namespace ai-ha-elixir || \
-            kubectl create secret generic ai-ha-elixir-secrets \
-              --namespace ai-ha-elixir \
-              --from-literal=SECRET_KEY_BASE=$(openssl rand -hex 64) \
-              --from-literal=AI_TOKEN="$AI_TOKEN"
+      #     kubectl get secret ai-ha-elixir-secrets --namespace ai-ha-elixir || \
+      #       kubectl create secret generic ai-ha-elixir-secrets \
+      #         --namespace ai-ha-elixir \
+      #         --from-literal=SECRET_KEY_BASE=$(openssl rand -hex 64) \
+      #         --from-literal=AI_TOKEN="$AI_TOKEN"
 
-          kubectl create configmap db-schema \
-            --from-file=postgres/schema/ \
-            --namespace ai-ha-elixir \
-            --dry-run=client -o yaml | kubectl apply -f -
+      #     kubectl create configmap db-schema \
+      #       --from-file=postgres/schema/ \
+      #       --namespace ai-ha-elixir \
+      #       --dry-run=client -o yaml | kubectl apply -f -
 
-          for file in kubernetes/*.yml; do
-            cat "$file" | envsubst | kubectl apply -f -
-          done
+      #     for file in kubernetes/*.yml; do
+      #       cat "$file" | envsubst | kubectl apply -f -
+      #     done
 
-      - name: Verify Deployment
-        env:
-          KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
-        run: |
-          echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
-          export KUBECONFIG=/tmp/elixir-kubeconfig.yml
+      # - name: Verify Deployment
+      #   env:
+      #     KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG_CONTENT  }}
+      #   run: |
+      #     echo "$KUBECONFIG_CONTENT" > /tmp/elixir-kubeconfig.yml
+      #     export KUBECONFIG=/tmp/elixir-kubeconfig.yml
 
-          echo "Waiting for StatefulSet rollout to complete..."
-          if ! kubectl rollout status statefulset/ai-ha-elixir --namespace ai-ha-elixir --timeout=180s --watch; then
-            echo "❌ StatefulSet rollout failed or timed out"
-            echo ""
-            echo "=== StatefulSet Status ==="
-            kubectl get statefulset ai-ha-elixir --namespace ai-ha-elixir -o wide
-            echo ""
-            echo "=== Pod Status ==="
-            kubectl get pods --namespace ai-ha-elixir -l app=ai-ha-elixir -o wide
-            echo ""
-            echo "=== Recent Events ==="
-            kubectl get events --namespace ai-ha-elixir --sort-by='.lastTimestamp' --field-selector type!=Normal | tail -30
-            echo ""
-            echo "=== StatefulSet Description ==="
-            kubectl describe statefulset ai-ha-elixir --namespace ai-ha-elixir
-            echo ""
-            echo "=== Pod Descriptions ==="
-            kubectl describe pods --namespace ai-ha-elixir -l app=ai-ha-elixir
-            exit 1
-          fi
-          echo "✅ StatefulSet rollout completed successfully"
+      #     echo "Waiting for StatefulSet rollout to complete..."
+      #     if ! kubectl rollout status statefulset/ai-ha-elixir --namespace ai-ha-elixir --timeout=180s --watch; then
+      #       echo "❌ StatefulSet rollout failed or timed out"
+      #       echo ""
+      #       echo "=== StatefulSet Status ==="
+      #       kubectl get statefulset ai-ha-elixir --namespace ai-ha-elixir -o wide
+      #       echo ""
+      #       echo "=== Pod Status ==="
+      #       kubectl get pods --namespace ai-ha-elixir -l app=ai-ha-elixir -o wide
+      #       echo ""
+      #       echo "=== Recent Events ==="
+      #       kubectl get events --namespace ai-ha-elixir --sort-by='.lastTimestamp' --field-selector type!=Normal | tail -30
+      #       echo ""
+      #       echo "=== StatefulSet Description ==="
+      #       kubectl describe statefulset ai-ha-elixir --namespace ai-ha-elixir
+      #       echo ""
+      #       echo "=== Pod Descriptions ==="
+      #       kubectl describe pods --namespace ai-ha-elixir -l app=ai-ha-elixir
+      #       exit 1
+      #     fi
+      #     echo "✅ StatefulSet rollout completed successfully"
