@@ -16,7 +16,8 @@ defmodule ElixirAiWeb.AiProvidersLive do
            "name" => "",
            "model_name" => "",
            "api_token" => "",
-           "completions_url" => ""
+           "completions_url" => "",
+           "capabilities" => ["text"]
          }
        end
      )
@@ -52,6 +53,39 @@ defmodule ElixirAiWeb.AiProvidersLive do
             value={@form_data["completions_url"]}
             label="Completions URL"
           />
+          <div class="pt-1">
+            <label class="block text-xs font-medium text-seafoam-500 mb-1.5">Capabilities</label>
+            <div class="flex gap-4">
+              <%= for cap <- AiProvider.valid_capabilities() do %>
+                <button
+                  type="button"
+                  phx-click="toggle_new_capability"
+                  phx-value-capability={cap}
+                  phx-target={@myself}
+                  class="flex items-center gap-1.5 cursor-pointer group"
+                >
+                  <span class="text-xs text-seafoam-500 group-hover:text-seafoam-300 transition-colors capitalize">
+                    {cap}
+                  </span>
+                  <span class={[
+                    "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
+                    if(cap in @form_data["capabilities"],
+                      do: "bg-seafoam-500",
+                      else: "bg-seafoam-900/60"
+                    )
+                  ]}>
+                    <span class={[
+                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out",
+                      if(cap in @form_data["capabilities"],
+                        do: "translate-x-4",
+                        else: "translate-x-0"
+                      )
+                    ]} />
+                  </span>
+                </button>
+              <% end %>
+            </div>
+          </div>
           <button
             type="submit"
             class="w-full px-4 py-2 rounded text-sm border border-seafoam-900/40 bg-seafoam-950/20 text-seafoam-300 hover:border-seafoam-700 hover:bg-seafoam-950/40 transition-colors"
@@ -75,6 +109,37 @@ defmodule ElixirAiWeb.AiProvidersLive do
               <div class="flex-1">
                 <h3 class="text-sm font-medium text-seafoam-300">{provider.name}</h3>
                 <p class="text-xs text-seafoam-500 mt-1">Model: {provider.model_name}</p>
+                <div class="mt-2 flex gap-4">
+                  <%= for cap <- AiProvider.valid_capabilities() do %>
+                    <button
+                      type="button"
+                      phx-click="toggle_capability"
+                      phx-value-id={provider.id}
+                      phx-value-capability={cap}
+                      phx-target={@myself}
+                      class="flex items-center gap-1.5 cursor-pointer group"
+                    >
+                      <span class="text-xs text-seafoam-500 group-hover:text-seafoam-300 transition-colors capitalize">
+                        {cap}
+                      </span>
+                      <span class={[
+                        "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
+                        if(cap in (provider.capabilities || []),
+                          do: "bg-seafoam-500",
+                          else: "bg-seafoam-900/60"
+                        )
+                      ]}>
+                        <span class={[
+                          "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out",
+                          if(cap in (provider.capabilities || []),
+                            do: "translate-x-4",
+                            else: "translate-x-0"
+                          )
+                        ]} />
+                      </span>
+                    </button>
+                  <% end %>
+                </div>
               </div>
               <button
                 phx-click="delete_provider"
@@ -121,6 +186,33 @@ defmodule ElixirAiWeb.AiProvidersLive do
     {:noreply, assign(socket, show_form: !socket.assigns.show_form, error: nil)}
   end
 
+  def handle_event("toggle_new_capability", %{"capability" => capability}, socket) do
+    current = socket.assigns.form_data["capabilities"] || []
+
+    new_caps =
+      if capability in current,
+        do: List.delete(current, capability),
+        else: [capability | current]
+
+    {:noreply,
+     assign(socket, form_data: Map.put(socket.assigns.form_data, "capabilities", new_caps))}
+  end
+
+  def handle_event("toggle_capability", %{"id" => id, "capability" => capability}, socket) do
+    provider = Enum.find(socket.assigns.providers, &(&1.id == id))
+    current = (provider && provider.capabilities) || []
+
+    new_caps =
+      if capability in current,
+        do: List.delete(current, capability),
+        else: [capability | current]
+
+    case AiProvider.update_capabilities(id, new_caps) do
+      :ok -> {:noreply, socket}
+      _ -> {:noreply, assign(socket, error: "Failed to update capabilities")}
+    end
+  end
+
   def handle_event("delete_provider", %{"id" => id}, socket) do
     {:noreply, assign(socket, confirm_delete_id: id)}
   end
@@ -163,7 +255,8 @@ defmodule ElixirAiWeb.AiProvidersLive do
           name: name,
           model_name: model_name,
           api_token: api_token,
-          completions_url: completions_url
+          completions_url: completions_url,
+          capabilities: socket.assigns.form_data["capabilities"] || ["text"]
         }
 
         case AiProvider.create(attrs) do
@@ -176,7 +269,8 @@ defmodule ElixirAiWeb.AiProvidersLive do
                  "name" => "",
                  "model_name" => "",
                  "api_token" => "",
-                 "completions_url" => ""
+                 "completions_url" => "",
+                 "capabilities" => ["text"]
                }
              )
              |> assign(error: nil)}

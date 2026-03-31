@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   model_name      TEXT        NOT NULL,
   api_token       TEXT        NOT NULL,
   completions_url TEXT        NOT NULL,
+  capabilities    JSONB       NOT NULL DEFAULT '["text"]',
   inserted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

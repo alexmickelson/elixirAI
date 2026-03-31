@@ -1,9 +1,14 @@
 providers:
-- name: provider name
-  model: gpt-oss-20b
-  responses_endpoint: http://example.com/api/responses
-  api_key: your_api_key_here
-- name: provider name 2
-  model: gpt-oss-20b
-  responses_endpoint: http://example.com/api/responses
-  api_key: your_api_key_here
+  - name: provider name
+    model: gpt-oss-20b
+    responses_endpoint: http://example.com/api/responses
+    api_key: your_api_key_here
+    capabilities:
+      - text
+  - name: provider name 2
+    model: gpt-oss-20b
+    responses_endpoint: http://example.com/api/responses
+    api_key: your_api_key_here
+    capabilities:
+      - text
+      - image

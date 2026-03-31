@@ -88,8 +88,15 @@ defmodule ElixirAi.AudioWorker do
   end
 
   defp do_transcribe(audio_binary, mime_type) do
-    endpoint = Application.get_env(:elixir_ai, :whisper_endpoint)
     filename = filename_for(mime_type)
+
+    {endpoint, api_token} =
+      case ElixirAi.AiProvider.find_by_capability("audio") do
+        {:ok, provider} -> {provider.completions_url, provider.api_token}
+        _ -> {Application.get_env(:elixir_ai, :whisper_endpoint), nil}
+      end
+
+    auth_headers = if api_token, do: [authorization: "Bearer #{api_token}"], else: []
 
     case Req.post(endpoint,
            form_multipart: [
@@ -97,6 +104,7 @@ defmodule ElixirAi.AudioWorker do
              response_format: "json",
              language: "en"
            ],
+           headers: auth_headers,
            receive_timeout: 30_000
          ) do
       {:ok, %{status: 200, body: %{"text" => text}}} ->

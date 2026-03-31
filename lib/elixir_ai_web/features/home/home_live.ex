@@ -146,6 +146,10 @@ defmodule ElixirAiWeb.HomeLive do
     {:noreply, assign(socket, ai_providers: AiProvider.all())}
   end
 
+  def handle_info({:provider_updated, _id}, socket) do
+    {:noreply, assign(socket, ai_providers: AiProvider.all())}
+  end
+
   def handle_info({:provider_deleted, _id}, socket) do
     {:noreply, assign(socket, ai_providers: AiProvider.all())}
   end

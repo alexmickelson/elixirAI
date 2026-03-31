@@ -31,7 +31,8 @@ config :elixir_ai, ElixirAiWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"lib/elixir_ai_web/(controllers|live|components)/.*(ex|heex)$"
+      ~r"lib/elixir_ai_web/(controllers|live|components|features|utils)/.*(ex|heex)$",
+      ~r"lib/elixir_ai_web\.(ex)$"
     ]
   ]
 
