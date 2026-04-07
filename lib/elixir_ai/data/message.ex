@@ -189,17 +189,15 @@ defmodule ElixirAi.Message do
 
   def insert(conversation_id, message, topic: topic)
       when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
-    timestamp = DateTime.truncate(DateTime.utc_now(), :second)
-
     case message.role do
       :tool ->
-        insert_tool_response(message, timestamp, topic)
+        insert_tool_response(message, topic)
 
       :assistant ->
-        insert_assistant_message(conversation_id, message, timestamp, topic)
+        insert_assistant_message(conversation_id, message, topic)
 
       :user ->
-        insert_user_message(conversation_id, message, timestamp, topic)
+        insert_user_message(conversation_id, message, topic)
     end
   end
 
@@ -214,7 +212,7 @@ defmodule ElixirAi.Message do
     end
   end
 
-  defp insert_user_message(conversation_id, message, timestamp, topic) do
+  defp insert_user_message(conversation_id, message, topic) do
     {prev_id, prev_table} = get_last_message_ref(conversation_id, topic)
 
     sql = """
@@ -233,7 +231,7 @@ defmodule ElixirAi.Message do
       $(role),
       $(content),
       $(tool_choice),
-      $(inserted_at)
+      NOW()
     )
     """
 
@@ -243,8 +241,7 @@ defmodule ElixirAi.Message do
       "prev_message_table" => prev_table,
       "role" => "user",
       "content" => message[:content],
-      "tool_choice" => message[:tool_choice],
-      "inserted_at" => timestamp
+      "tool_choice" => message[:tool_choice]
     }
 
     case DbHelpers.run_sql(sql, params, topic) do
@@ -253,7 +250,7 @@ defmodule ElixirAi.Message do
     end
   end
 
-  defp insert_assistant_message(conversation_id, message, timestamp, topic) do
+  defp insert_assistant_message(conversation_id, message, topic) do
     {prev_id, prev_table} = get_last_message_ref(conversation_id, topic)
 
     message_sql = """
@@ -272,7 +269,7 @@ defmodule ElixirAi.Message do
       $(role),
       $(content),
       $(reasoning_content),
-      $(inserted_at)
+      NOW()
     )
     RETURNING id
     """
@@ -283,8 +280,7 @@ defmodule ElixirAi.Message do
       "prev_message_table" => prev_table,
       "role" => "assistant",
       "content" => message[:content],
-      "reasoning_content" => message[:reasoning_content],
-      "inserted_at" => timestamp
+      "reasoning_content" => message[:reasoning_content]
     }
 
     case DbHelpers.run_sql(message_sql, message_params, topic) do
@@ -312,7 +308,7 @@ defmodule ElixirAi.Message do
               $(tool_name),
               $(tool_call_id),
               $(arguments)::jsonb,
-              $(inserted_at)
+              NOW()
             )
             """
 
@@ -323,8 +319,7 @@ defmodule ElixirAi.Message do
               "tool_name" => tool_call[:name] || tool_call["name"],
               "tool_call_id" => tool_call[:id] || tool_call["id"],
               "arguments" =>
-                encode_tool_call_arguments(tool_call[:arguments] || tool_call["arguments"]),
-              "inserted_at" => timestamp
+                encode_tool_call_arguments(tool_call[:arguments] || tool_call["arguments"])
             }
 
             DbHelpers.run_sql(tool_call_sql, tool_call_params, topic)
@@ -338,7 +333,7 @@ defmodule ElixirAi.Message do
     end
   end
 
-  defp insert_tool_response(message, _timestamp, topic) do
+  defp insert_tool_response(message, topic) do
     # tool_response_messages has no conversation_id, so look up via the tool_call
     tool_call_id = message[:tool_call_id]
 

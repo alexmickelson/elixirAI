@@ -126,7 +126,6 @@ defmodule ElixirAiWeb.VoiceLive do
      )}
   end
 
-  # Transcription received — open conversation and send as user message
   def handle_info({:transcription_result, {:ok, text}}, socket) do
     socket =
       try do
@@ -312,7 +311,7 @@ defmodule ElixirAiWeb.VoiceLive do
     else
       name = "voice-#{System.system_time(:second)}"
 
-      case AiProvider.find_by_name("default") do
+      case AiProvider.get_voice_assistant() do
         {:ok, provider} ->
           case ConversationManager.create_conversation(name, provider.id, "voice") do
             {:ok, _pid} ->
@@ -337,7 +336,7 @@ defmodule ElixirAiWeb.VoiceLive do
         {:error, reason} ->
           assign(socket,
             state: :transcribed,
-            ai_error: "No default AI provider found: #{inspect(reason)}"
+            ai_error: "No voice assistant provider found: #{inspect(reason)}"
           )
       end
     end

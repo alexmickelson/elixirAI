@@ -72,20 +72,16 @@ defmodule ElixirAi.Conversation do
           $(ai_provider_id),
           $(category),
           $(allowed_tools)::jsonb,
-          $(inserted_at),
-          $(updated_at)
+          NOW(),
+          NOW()
         )
         """
-
-        timestamp = now()
 
         params = %{
           "name" => name,
           "ai_provider_id" => binary_id,
           "category" => category,
-          "allowed_tools" => Jason.encode!(allowed_tools),
-          "inserted_at" => timestamp,
-          "updated_at" => timestamp
+          "allowed_tools" => Jason.encode!(allowed_tools)
         }
 
         case DbHelpers.run_sql(sql, params, "conversations") do
@@ -137,14 +133,13 @@ defmodule ElixirAi.Conversation do
   def update_allowed_tools(name, tool_names) when is_list(tool_names) do
     sql = """
     UPDATE conversations
-    SET allowed_tools = $(allowed_tools)::jsonb, updated_at = $(updated_at)
+    SET allowed_tools = $(allowed_tools)::jsonb, updated_at = NOW()
     WHERE name = $(name)
     """
 
     params = %{
       "name" => name,
-      "allowed_tools" => Jason.encode!(tool_names),
-      "updated_at" => now()
+      "allowed_tools" => Jason.encode!(tool_names)
     }
 
     case DbHelpers.run_sql(sql, params, "conversations") do
@@ -168,14 +163,13 @@ defmodule ElixirAi.Conversation do
       when tool_choice in ["auto", "none", "required"] do
     sql = """
     UPDATE conversations
-    SET tool_choice = $(tool_choice), updated_at = $(updated_at)
+    SET tool_choice = $(tool_choice), updated_at = NOW()
     WHERE name = $(name)
     """
 
     params = %{
       "name" => name,
-      "tool_choice" => tool_choice,
-      "updated_at" => now()
+      "tool_choice" => tool_choice
     }
 
     case DbHelpers.run_sql(sql, params, "conversations") do
@@ -189,14 +183,13 @@ defmodule ElixirAi.Conversation do
       {:ok, binary_id} ->
         sql = """
         UPDATE conversations
-        SET ai_provider_id = $(ai_provider_id), updated_at = $(updated_at)
+        SET ai_provider_id = $(ai_provider_id), updated_at = NOW()
         WHERE name = $(name)
         """
 
         params = %{
           "name" => name,
-          "ai_provider_id" => binary_id,
-          "updated_at" => now()
+          "ai_provider_id" => binary_id
         }
 
         case DbHelpers.run_sql(sql, params, "conversations") do
@@ -242,6 +235,4 @@ defmodule ElixirAi.Conversation do
       [row | _] -> {:ok, struct(Provider, row)}
     end
   end
-
-  defp now, do: DateTime.truncate(DateTime.utc_now(), :second)
 end

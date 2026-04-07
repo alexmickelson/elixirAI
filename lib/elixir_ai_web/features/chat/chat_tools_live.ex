@@ -1,5 +1,6 @@
 defmodule ElixirAiWeb.ChatToolsLive do
   use ElixirAiWeb, :live_component
+  import ElixirAiWeb.FormComponents
   alias ElixirAi.{AiTools, ChatRunner}
 
   def update(assigns, socket) do
@@ -50,32 +51,14 @@ defmodule ElixirAiWeb.ChatToolsLive do
           <ul class="py-1">
             <%= for tool <- @all_tools do %>
               <li class="px-3 py-1.5">
-                <button
-                  type="button"
+                <.toggle
+                  id={"chat-tool-#{tool}"}
+                  checked={tool in @allowed_tools}
+                  label={tool}
                   phx-click="toggle_tool"
                   phx-value-tool={tool}
                   phx-target={@myself}
-                  class="flex items-center justify-between w-full cursor-pointer group"
-                >
-                  <span class="text-sm text-seafoam-400 group-hover:text-seafoam-200 transition-colors">
-                    {tool}
-                  </span>
-                  <span class={[
-                    "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
-                    if(tool in @allowed_tools,
-                      do: "bg-seafoam-500",
-                      else: "bg-seafoam-900/60"
-                    )
-                  ]}>
-                    <span class={[
-                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out",
-                      if(tool in @allowed_tools,
-                        do: "translate-x-4",
-                        else: "translate-x-0"
-                      )
-                    ]} />
-                  </span>
-                </button>
+                />
               </li>
             <% end %>
           </ul>

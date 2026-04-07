@@ -4,27 +4,19 @@ defmodule ElixirAi.AiProvider do
   import ElixirAi.PubsubTopics
 
   defmodule AiProviderSchema do
-    defstruct [:id, :name, :model_name, :api_token, :completions_url, :capabilities]
+    defstruct [:id, :name, :model_name, :api_token, :completions_url, :capabilities, :inserted_at]
 
-    def valid_capabilities, do: ["text", "image"]
+    def valid_capabilities, do: ["text", "image", "voice_assistant"]
 
     def schema do
       Zoi.object(%{
         id: Zoi.optional(Zoi.string()),
         name: Zoi.string(),
         model_name: Zoi.string(),
-        api_token: Zoi.nullish(Zoi.string()),
-        completions_url: Zoi.nullish(Zoi.string()),
-        capabilities: Zoi.any()
-      })
-    end
-
-    def partial_schema do
-      Zoi.object(%{
-        id: Zoi.optional(Zoi.string()),
-        name: Zoi.string(),
-        model_name: Zoi.string(),
-        capabilities: Zoi.any()
+        api_token: Zoi.optional(Zoi.nullish(Zoi.string())),
+        completions_url: Zoi.optional(Zoi.nullish(Zoi.string())),
+        capabilities: Zoi.any(),
+        inserted_at: Zoi.optional(Zoi.any())
       })
     end
   end
@@ -32,10 +24,21 @@ defmodule ElixirAi.AiProvider do
   def valid_capabilities, do: AiProviderSchema.valid_capabilities()
 
   def all do
-    sql = "SELECT id, name, model_name, capabilities FROM ai_providers"
+    sql = """
+    SELECT
+      ap.id, ap.name, ap.model_name,
+      COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') AS capabilities,
+      ap.inserted_at
+    FROM ai_providers ap
+    LEFT JOIN ai_provider_capabilities apc ON apc.ai_provider_id = ap.id
+    LEFT JOIN capabilities c ON c.id = apc.capability_id
+    GROUP BY ap.id, ap.name, ap.model_name, ap.inserted_at
+    ORDER BY ap.inserted_at ASC
+    """
+
     params = %{}
 
-    case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.partial_schema()) do
+    case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.schema()) do
       {:error, _} ->
         []
 
@@ -44,7 +47,6 @@ defmodule ElixirAi.AiProvider do
         |> Enum.map(fn row ->
           row
           |> convert_uuid_to_string()
-          |> decode_capabilities()
           |> then(&struct(AiProviderSchema, &1))
         end)
         |> tap(&Logger.debug("AiProvider.all() returning: #{inspect(&1)}"))
@@ -57,20 +59,9 @@ defmodule ElixirAi.AiProvider do
 
   defp convert_uuid_to_string(provider), do: provider
 
-  defp decode_capabilities(%{capabilities: caps} = provider) when is_list(caps), do: provider
-
-  defp decode_capabilities(%{capabilities: caps} = provider) when is_binary(caps) do
-    case Jason.decode(caps) do
-      {:ok, list} when is_list(list) -> %{provider | capabilities: list}
-      _ -> %{provider | capabilities: []}
-    end
-  end
-
-  defp decode_capabilities(provider), do: %{provider | capabilities: []}
-
   def create(attrs) do
-    capabilities = Map.get(attrs, :capabilities, ["text"])
-    invalid_caps = Enum.reject(capabilities, &(&1 in AiProviderSchema.valid_capabilities()))
+    capabilities = attrs |> Map.get(:capabilities, [])
+    invalid_caps = capabilities |> Enum.reject(&(&1 in AiProviderSchema.valid_capabilities()))
 
     if invalid_caps != [] do
       {:error, {:invalid_capabilities, invalid_caps}}
@@ -80,15 +71,12 @@ defmodule ElixirAi.AiProvider do
   end
 
   defp do_create(attrs, capabilities) do
-    now = DateTime.truncate(DateTime.utc_now(), :second)
-
-    sql = """
+    provider_sql = """
     INSERT INTO ai_providers (
       name,
       model_name,
       api_token,
       completions_url,
-      capabilities,
       inserted_at,
       updated_at
     ) VALUES (
@@ -96,38 +84,59 @@ defmodule ElixirAi.AiProvider do
       $(model_name),
       $(api_token),
       $(completions_url),
-      $(capabilities)::jsonb,
-      $(inserted_at),
-      $(updated_at)
+      NOW(),
+      NOW()
     )
+    RETURNING id
     """
 
-    params = %{
+    provider_params = %{
       "name" => attrs.name,
       "model_name" => attrs.model_name,
       "api_token" => attrs.api_token,
-      "completions_url" => attrs.completions_url,
-      "capabilities" => Jason.encode!(capabilities),
-      "inserted_at" => now,
-      "updated_at" => now
+      "completions_url" => attrs.completions_url
     }
 
-    case DbHelpers.run_sql(sql, params, providers_topic()) do
+    case DbHelpers.run_sql(provider_sql, provider_params, providers_topic()) do
       {:error, :db_error} ->
         {:error, :db_error}
 
-      _result ->
-        Logger.info(
-          "Provider created, broadcasting :provider_added message to topic #{providers_topic()}"
-        )
+      [%{"id" => provider_id} | _] ->
+        case assign_capabilities(provider_id, capabilities) do
+          :ok ->
+            Logger.info(
+              "Provider created, broadcasting :provider_added message to topic #{providers_topic()}"
+            )
 
-        Phoenix.PubSub.broadcast(
-          ElixirAi.PubSub,
-          providers_topic(),
-          {:provider_added, attrs}
-        )
+            Phoenix.PubSub.broadcast(
+              ElixirAi.PubSub,
+              providers_topic(),
+              {:provider_added, attrs}
+            )
 
-        :ok
+            :ok
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+    end
+  end
+
+  defp assign_capabilities(_provider_id, []), do: :ok
+
+  defp assign_capabilities(provider_id, capabilities) do
+    sql = """
+    INSERT INTO ai_provider_capabilities (ai_provider_id, capability_id)
+    SELECT $(provider_id), c.id
+    FROM capabilities c
+    WHERE c.name = ANY($(capabilities)::text[])
+    """
+
+    params = %{"provider_id" => provider_id, "capabilities" => capabilities}
+
+    case DbHelpers.run_sql(sql, params, providers_topic()) do
+      {:error, :db_error} -> {:error, :db_error}
+      _ -> :ok
     end
   end
 
@@ -137,45 +146,95 @@ defmodule ElixirAi.AiProvider do
     if invalid_caps != [] do
       {:error, {:invalid_capabilities, invalid_caps}}
     else
-      now = DateTime.truncate(DateTime.utc_now(), :second)
+      case Ecto.UUID.dump(id) do
+        {:ok, binary_id} ->
+          sql = """
+          WITH
+            stripped AS (
+              DELETE FROM ai_provider_capabilities apc
+              USING capabilities c
+              WHERE apc.capability_id = c.id
+                AND c.name = 'voice_assistant'
+                AND apc.ai_provider_id != $(id)
+                AND 'voice_assistant' = ANY($(capabilities)::text[])
+              RETURNING apc.ai_provider_id AS affected_id
+            ),
+            removed AS (
+              DELETE FROM ai_provider_capabilities apc
+              USING capabilities c
+              WHERE apc.capability_id = c.id
+                AND apc.ai_provider_id = $(id)
+                AND NOT (c.name = ANY($(capabilities)::text[]))
+              RETURNING apc.ai_provider_id
+            ),
+            inserted AS (
+              INSERT INTO ai_provider_capabilities (ai_provider_id, capability_id)
+              SELECT $(id), c.id
+              FROM capabilities c
+              WHERE c.name = ANY($(capabilities)::text[])
+              ON CONFLICT DO NOTHING
+            )
+          SELECT DISTINCT affected_id FROM stripped
+          """
 
-      sql = """
-      UPDATE ai_providers
-      SET capabilities = $(capabilities)::jsonb, updated_at = $(updated_at)
-      WHERE id = $(id)::uuid
-      """
+          params = %{"id" => binary_id, "capabilities" => capabilities}
 
-      params = %{
-        "capabilities" => Jason.encode!(capabilities),
-        "updated_at" => now,
-        "id" => id
-      }
+          case DbHelpers.run_sql(sql, params, providers_topic()) do
+            {:error, :db_error} ->
+              {:error, :db_error}
 
-      case DbHelpers.run_sql(sql, params, providers_topic()) do
-        {:error, :db_error} ->
-          {:error, :db_error}
+            rows ->
+              other_ids =
+                rows
+                |> Enum.map(fn %{"affected_id" => bid} -> Ecto.UUID.cast!(bid) end)
+                |> Enum.uniq()
 
-        _result ->
-          Phoenix.PubSub.broadcast(
-            ElixirAi.PubSub,
-            providers_topic(),
-            {:provider_updated, id}
-          )
+              broadcast_capability_updates(id, other_ids)
+              :ok
+          end
 
-          :ok
+        :error ->
+          Logger.error("update_capabilities: invalid UUID #{inspect(id)}")
+          {:error, :invalid_uuid}
       end
     end
   end
 
+  defp broadcast_capability_updates(id, other_affected_ids) do
+    [id | other_affected_ids]
+    |> Enum.uniq()
+    |> Enum.each(fn updated_id ->
+      Logger.info(
+        "Provider updated, broadcasting :provider_updated message to topic #{providers_topic()} for provider ID #{updated_id}"
+      )
+
+      Phoenix.PubSub.broadcast(
+        ElixirAi.PubSub,
+        providers_topic(),
+        {:provider_updated, updated_id}
+      )
+    end)
+  end
+
   def find_by_capability(capability) when is_binary(capability) do
     sql = """
-    SELECT id, name, model_name, api_token, completions_url, capabilities
-    FROM ai_providers
-    WHERE capabilities @> $(capability)::jsonb
+    SELECT
+      ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url,
+      COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') AS capabilities
+    FROM ai_providers ap
+    LEFT JOIN ai_provider_capabilities apc ON apc.ai_provider_id = ap.id
+    LEFT JOIN capabilities c ON c.id = apc.capability_id
+    WHERE ap.id IN (
+      SELECT apc2.ai_provider_id
+      FROM ai_provider_capabilities apc2
+      JOIN capabilities c2 ON c2.id = apc2.capability_id
+      WHERE c2.name = $(capability)
+    )
+    GROUP BY ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url
     LIMIT 1
     """
 
-    params = %{"capability" => Jason.encode!([capability])}
+    params = %{"capability" => capability}
 
     case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.schema()) do
       {:error, _} ->
@@ -188,16 +247,22 @@ defmodule ElixirAi.AiProvider do
         {:ok,
          row
          |> convert_uuid_to_string()
-         |> decode_capabilities()
          |> then(&struct(AiProviderSchema, &1))}
     end
   end
 
+  def get_voice_assistant, do: find_by_capability("voice_assistant")
+
   def find_by_name(name) do
     sql = """
-    SELECT id, name, model_name, api_token, completions_url, capabilities
-    FROM ai_providers
-    WHERE name = $(name)
+    SELECT
+      ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url,
+      COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') AS capabilities
+    FROM ai_providers ap
+    LEFT JOIN ai_provider_capabilities apc ON apc.ai_provider_id = ap.id
+    LEFT JOIN capabilities c ON c.id = apc.capability_id
+    WHERE ap.name = $(name)
+    GROUP BY ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url
     LIMIT 1
     """
 
@@ -214,7 +279,6 @@ defmodule ElixirAi.AiProvider do
         {:ok,
          row
          |> convert_uuid_to_string()
-         |> decode_capabilities()
          |> then(&struct(AiProviderSchema, &1))}
     end
   end
@@ -223,9 +287,14 @@ defmodule ElixirAi.AiProvider do
     case Ecto.UUID.dump(id) do
       {:ok, binary_id} ->
         sql = """
-        SELECT id, name, model_name, api_token, completions_url, capabilities
-        FROM ai_providers
-        WHERE id = $(id)
+        SELECT
+          ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url,
+          COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') AS capabilities
+        FROM ai_providers ap
+        LEFT JOIN ai_provider_capabilities apc ON apc.ai_provider_id = ap.id
+        LEFT JOIN capabilities c ON c.id = apc.capability_id
+        WHERE ap.id = $(id)
+        GROUP BY ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url
         LIMIT 1
         """
 
@@ -242,7 +311,6 @@ defmodule ElixirAi.AiProvider do
             {:ok,
              row
              |> convert_uuid_to_string()
-             |> decode_capabilities()
              |> then(&struct(AiProviderSchema, &1))}
         end
 
@@ -252,25 +320,31 @@ defmodule ElixirAi.AiProvider do
   end
 
   def delete(id) do
-    sql = "DELETE FROM ai_providers WHERE id = $(id)::uuid"
-    params = %{"id" => id}
+    case Ecto.UUID.dump(id) do
+      {:ok, binary_id} ->
+        sql = "DELETE FROM ai_providers WHERE id = $(id)"
+        params = %{"id" => binary_id}
 
-    case DbHelpers.run_sql(sql, params, providers_topic()) do
-      {:error, :db_error} ->
-        {:error, :db_error}
+        case DbHelpers.run_sql(sql, params, providers_topic()) do
+          {:error, :db_error} ->
+            {:error, :db_error}
 
-      _result ->
-        Logger.info(
-          "Provider deleted, broadcasting :provider_deleted message to topic #{providers_topic()}"
-        )
+          _result ->
+            Logger.info(
+              "Provider deleted, broadcasting :provider_deleted message to topic #{providers_topic()}"
+            )
 
-        Phoenix.PubSub.broadcast(
-          ElixirAi.PubSub,
-          providers_topic(),
-          {:provider_deleted, id}
-        )
+            Phoenix.PubSub.broadcast(
+              ElixirAi.PubSub,
+              providers_topic(),
+              {:provider_deleted, id}
+            )
 
-        :ok
+            :ok
+        end
+
+      :error ->
+        {:error, :invalid_uuid}
     end
   end
 

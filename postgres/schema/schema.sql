@@ -1,4 +1,10 @@
--- Initial schema
+CREATE TABLE IF NOT EXISTS capabilities (
+  id    SERIAL PRIMARY KEY,
+  name  TEXT   NOT NULL UNIQUE
+);
+
+INSERT INTO capabilities (name) VALUES ('text'), ('image'), ('voice_assistant')
+ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ai_providers (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -6,9 +12,14 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   model_name      TEXT        NOT NULL,
   api_token       TEXT        NOT NULL,
   completions_url TEXT        NOT NULL,
-  capabilities    JSONB       NOT NULL DEFAULT '["text"]',
   inserted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS ai_provider_capabilities (
+  ai_provider_id  UUID    NOT NULL REFERENCES ai_providers(id) ON DELETE CASCADE,
+  capability_id   INTEGER NOT NULL REFERENCES capabilities(id) ON DELETE CASCADE,
+  UNIQUE (ai_provider_id, capability_id)
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -60,3 +71,4 @@ CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_prev          ON tool_calls_reques
 CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_text_msg      ON tool_calls_request_messages(text_message_id);
 CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_tool_call_id  ON tool_calls_request_messages(tool_call_id);
 CREATE INDEX IF NOT EXISTS idx_tool_response_msgs_prev      ON tool_response_messages(prev_message_id);
+CREATE INDEX IF NOT EXISTS idx_ai_provider_capabilities_provider ON ai_provider_capabilities(ai_provider_id);
