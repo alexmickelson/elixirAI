@@ -1,7 +1,9 @@
 defmodule ElixirAiWeb.Voice.VoiceConversation do
   use Phoenix.Component
   alias Phoenix.LiveView.JS
-  import ElixirAiWeb.ChatMessage
+  import ElixirAiWeb.UserMessage
+  import ElixirAiWeb.AssistantMessage
+  import ElixirAiWeb.ToolResultMessage
   import ElixirAiWeb.Spinner
 
   attr :messages, :list, required: true

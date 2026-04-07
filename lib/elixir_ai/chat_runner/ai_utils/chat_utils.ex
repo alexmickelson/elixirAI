@@ -72,6 +72,7 @@ defmodule ElixirAi.ChatUtils do
       body = %{
         model: model,
         stream: true,
+        stream_options: %{include_usage: true},
         messages: messages |> Enum.map(&api_message/1),
         tools: Enum.map(tools, & &1.definition),
         tool_choice: tool_choice

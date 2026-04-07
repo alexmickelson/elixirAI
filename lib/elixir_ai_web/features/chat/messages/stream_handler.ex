@@ -3,7 +3,14 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   import ElixirAi.ChatRunner.OutboundHelpers
 
   def handle({:start_new_ai_response, id}, state) do
-    starting_response = %{id: id, reasoning_content: "", content: "", tool_calls: []}
+    starting_response = %{
+      id: id,
+      reasoning_content: "",
+      content: "",
+      tool_calls: [],
+      started_at: System.monotonic_time(:millisecond)
+    }
+
     broadcast_ui(state.name, {:start_ai_response_stream, starting_response})
     {:noreply, %{state | streaming_response: starting_response}}
   end
@@ -34,27 +41,50 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
      }}
   end
 
-  def handle({:ai_text_stream_finish, _id}, state) do
+  def handle({:ai_text_stream_finish, id}, state) do
     Logger.info(
-      "AI stream finished for id #{state.streaming_response.id}, broadcasting end of AI response"
+      "AI stream finished for id #{state.streaming_response.id}, waiting for usage chunk"
     )
 
-    final_message = %{
-      role: :assistant,
-      content: state.streaming_response.content,
-      reasoning_content: state.streaming_response.reasoning_content,
-      tool_calls: state.streaming_response.tool_calls
-    }
+    # Mark content as done so `:ai_usage` knows elapsed time. Also schedule a
+    # fallback in case the provider never sends a usage chunk (e.g. proxies that
+    # strip the trailing SSE frame).
+    updated =
+      Map.put(state.streaming_response, :content_finished_at, System.monotonic_time(:millisecond))
 
-    broadcast_ui(state.name, {:end_ai_response, final_message})
-    store_message(state.name, final_message)
+    Process.send_after(self(), {:finalize_response, id}, 1_500)
 
-    {:noreply,
-     %{
-       state
-       | streaming_response: nil,
-         messages: state.messages ++ [final_message]
-     }}
+    {:noreply, %{state | streaming_response: updated}}
+  end
+
+  def handle({:ai_usage, prompt_tokens, completion_tokens}, state) do
+    with resp when not is_nil(resp) <- state.streaming_response,
+         finished_at when not is_nil(finished_at) <- resp[:content_finished_at] do
+      elapsed_s = max(finished_at - resp.started_at, 1) / 1_000
+      tps = Float.round(completion_tokens / elapsed_s, 1)
+
+      final_message = %{
+        role: :assistant,
+        content: resp.content,
+        reasoning_content: resp.reasoning_content,
+        tool_calls: resp.tool_calls,
+        input_tokens: prompt_tokens,
+        output_tokens: completion_tokens,
+        tokens_per_second: tps
+      }
+
+      broadcast_ui(state.name, {:end_ai_response, final_message})
+      store_message(state.name, final_message)
+
+      {:noreply,
+       %{
+         state
+         | streaming_response: nil,
+           messages: state.messages ++ [final_message]
+       }}
+    else
+      _ -> {:noreply, state}
+    end
   end
 
   def handle(
@@ -179,5 +209,38 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
     Logger.error("AI request error: #{inspect(reason)}")
     broadcast_ui(state.name, {:ai_request_error, reason})
     {:noreply, %{state | streaming_response: nil, pending_tool_calls: []}}
+  end
+
+  # Fallback fired ~1.5 s after finish_reason: stop for providers that never
+  # send a usage chunk. No-op if the usage chunk already finalized the message.
+  def handle({:finalize_response, _id}, %{streaming_response: nil} = state) do
+    {:noreply, state}
+  end
+
+  def handle({:finalize_response, _id}, state) do
+    resp = state.streaming_response
+
+    if resp[:content_finished_at] do
+      Logger.info("Finalizing response via fallback (no usage chunk received)")
+
+      final_message = %{
+        role: :assistant,
+        content: resp.content,
+        reasoning_content: resp.reasoning_content,
+        tool_calls: resp.tool_calls
+      }
+
+      broadcast_ui(state.name, {:end_ai_response, final_message})
+      store_message(state.name, final_message)
+
+      {:noreply,
+       %{
+         state
+         | streaming_response: nil,
+           messages: state.messages ++ [final_message]
+       }}
+    else
+      {:noreply, state}
+    end
   end
 end

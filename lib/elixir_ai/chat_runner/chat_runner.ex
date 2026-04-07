@@ -205,6 +205,7 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_info({:stream, inner}, state), do: StreamHandler.handle(inner, state)
   def handle_info({:error, inner}, state), do: ErrorHandler.handle(inner, state)
+  def handle_info({:finalize_response, _id} = msg, state), do: StreamHandler.handle(msg, state)
 
   def handle_info({:register_pending_approval, ref, pid}, state) do
     {:noreply, put_in(state, [:pending_approvals, ref], pid)}

@@ -3,7 +3,9 @@ defmodule ElixirAiWeb.ChatLive do
   use ElixirAi.AiControllable
   require Logger
   import ElixirAiWeb.Spinner
-  import ElixirAiWeb.ChatMessage
+  import ElixirAiWeb.UserMessage
+  import ElixirAiWeb.AssistantMessage
+  import ElixirAiWeb.ToolResultMessage
   import ElixirAiWeb.ChatProviderDisplay
   alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
   import ElixirAi.PubsubTopics
@@ -129,6 +131,9 @@ defmodule ElixirAiWeb.ChatLive do
                 content={Map.get(msg, :content) || ""}
                 reasoning_content={Map.get(msg, :reasoning_content)}
                 tool_calls={Map.get(msg, :tool_calls) || []}
+                input_tokens={Map.get(msg, :input_tokens)}
+                output_tokens={Map.get(msg, :output_tokens)}
+                tokens_per_second={Map.get(msg, :tokens_per_second)}
               />
           <% end %>
         <% end %>

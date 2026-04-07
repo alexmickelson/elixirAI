@@ -1,6 +1,6 @@
 FROM elixir:1.19.5-otp-28-alpine
 
-RUN apk add --no-cache build-base git bash wget nodejs npm inotify-tools
+RUN apk add --no-cache build-base git bash wget nodejs npm inotify-tools docker-cli
 
 WORKDIR /app
 

@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS text_messages (
   content            TEXT,
   reasoning_content  TEXT,
   tool_choice        TEXT        CHECK (tool_choice IN ('auto', 'none', 'required')),
+  input_tokens       INTEGER,
+  output_tokens      INTEGER,
+  tokens_per_second  FLOAT,
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

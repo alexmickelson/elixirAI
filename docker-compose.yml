@@ -39,6 +39,7 @@ services:
       sh -c '
         chown -R elixir:elixir /app/_build
         chown -R elixir:elixir /app/deps
+        chmod 666 /var/run/docker.sock
         su elixir -c "elixir --sname elixir_ai@node1 --cookie secret_cluster_cookie -S mix phx.server"
       '
     volumes:

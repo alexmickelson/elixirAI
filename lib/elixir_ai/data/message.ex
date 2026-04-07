@@ -3,7 +3,16 @@ defmodule ElixirAi.Message do
   require Logger
 
   defmodule MessageSchema do
-    defstruct [:role, :content, :reasoning_content, :tool_calls, :tool_call_id]
+    defstruct [
+      :role,
+      :content,
+      :reasoning_content,
+      :tool_calls,
+      :tool_call_id,
+      :input_tokens,
+      :output_tokens,
+      :tokens_per_second
+    ]
 
     def schema do
       Zoi.object(%{
@@ -26,6 +35,9 @@ defmodule ElixirAi.Message do
       content: Zoi.nullish(Zoi.string()),
       reasoning_content: Zoi.nullish(Zoi.string()),
       tool_choice: Zoi.nullish(Zoi.string()),
+      input_tokens: Zoi.optional(Zoi.nullish(Zoi.integer())),
+      output_tokens: Zoi.optional(Zoi.nullish(Zoi.integer())),
+      tokens_per_second: Zoi.optional(Zoi.nullish(Zoi.float())),
       inserted_at: Zoi.any()
     })
   end
@@ -77,7 +89,10 @@ defmodule ElixirAi.Message do
               role: String.to_existing_atom(row.role),
               content: row[:content],
               reasoning_content: row[:reasoning_content],
-              tool_calls: []
+              tool_calls: [],
+              input_tokens: row[:input_tokens],
+              output_tokens: row[:output_tokens],
+              tokens_per_second: row[:tokens_per_second]
             }
 
           "tool_calls_request_messages" ->
@@ -127,6 +142,9 @@ defmodule ElixirAi.Message do
       tm.content,
       tm.reasoning_content,
       tm.tool_choice,
+      tm.input_tokens,
+      tm.output_tokens,
+      tm.tokens_per_second,
       tm.inserted_at
     FROM text_messages tm
     WHERE tm.conversation_id = $(conversation_id)
@@ -261,6 +279,9 @@ defmodule ElixirAi.Message do
       role,
       content,
       reasoning_content,
+      input_tokens,
+      output_tokens,
+      tokens_per_second,
       inserted_at
     ) VALUES (
       $(conversation_id),
@@ -269,6 +290,9 @@ defmodule ElixirAi.Message do
       $(role),
       $(content),
       $(reasoning_content),
+      $(input_tokens),
+      $(output_tokens),
+      $(tokens_per_second),
       NOW()
     )
     RETURNING id
@@ -280,7 +304,10 @@ defmodule ElixirAi.Message do
       "prev_message_table" => prev_table,
       "role" => "assistant",
       "content" => message[:content],
-      "reasoning_content" => message[:reasoning_content]
+      "reasoning_content" => message[:reasoning_content],
+      "input_tokens" => message[:input_tokens],
+      "output_tokens" => message[:output_tokens],
+      "tokens_per_second" => message[:tokens_per_second]
     }
 
     case DbHelpers.run_sql(message_sql, message_params, topic) do

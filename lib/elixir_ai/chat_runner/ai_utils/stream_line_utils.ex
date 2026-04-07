@@ -33,7 +33,7 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
     )
   end
 
-  # last streamed response
+  # last streamed response — content finished, wait for the usage chunk
   def handle_stream_line(
         server,
         %{
@@ -41,11 +41,23 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
           "id" => id
         } = _msg
       ) do
-    # Logger.info("Received end of AI response stream for id #{id} with message: #{inspect(msg)}")
-
     send(
       server,
       {:stream, {:ai_text_stream_finish, id}}
+    )
+  end
+
+  # usage chunk — emitted after finish_reason: "stop" when stream_options.include_usage is true
+  def handle_stream_line(server, %{
+        "choices" => [],
+        "usage" => %{
+          "prompt_tokens" => prompt_tokens,
+          "completion_tokens" => completion_tokens
+        }
+      }) do
+    send(
+      server,
+      {:stream, {:ai_usage, prompt_tokens, completion_tokens}}
     )
   end
 
