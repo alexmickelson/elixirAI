@@ -51,6 +51,7 @@ defmodule ElixirAi.Message do
       tool_name: Zoi.string(),
       tool_call_id: Zoi.string(),
       arguments: Zoi.any(),
+      approval_decision: Zoi.nullish(Zoi.string()),
       inserted_at: Zoi.any()
     })
   end
@@ -168,6 +169,7 @@ defmodule ElixirAi.Message do
       tc.tool_name,
       tc.tool_call_id,
       tc.arguments,
+      tc.approval_decision,
       tc.inserted_at
     FROM tool_calls_request_messages tc
     JOIN text_messages tm ON tc.text_message_id = tm.id
@@ -227,6 +229,25 @@ defmodule ElixirAi.Message do
       :error ->
         Logger.error("Invalid conversation_id for message insert: #{inspect(conversation_id)}")
         {:error, :invalid_conversation_id}
+    end
+  end
+
+  def update_approval_decision(tool_call_id, decision, topic: topic) do
+    sql = """
+    UPDATE tool_calls_request_messages
+    SET approval_decision = $(decision)
+    WHERE tool_call_id = $(tool_call_id)
+    """
+
+    params = %{"tool_call_id" => tool_call_id, "decision" => decision}
+
+    case DbHelpers.run_sql(sql, params, topic) do
+      {:error, :db_error} ->
+        Logger.warning("Failed to update approval_decision for tool_call_id=#{tool_call_id}")
+        :error
+
+      _ ->
+        :ok
     end
   end
 

@@ -13,7 +13,8 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
       messages_with_system_prompt(new_state.messages, state.system_prompt),
       state.server_tools ++ state.liveview_tools ++ state.page_tools,
       state.provider,
-      effective_tool_choice
+      effective_tool_choice,
+      state.response_format
     )
 
     {:noreply, new_state}

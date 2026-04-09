@@ -6,6 +6,7 @@ defmodule ElixirAi.ChatRunner do
   import ElixirAi.ChatRunner.OutboundHelpers
 
   alias ElixirAi.ChatRunner.{
+    ApprovalTracker,
     ConversationCalls,
     ErrorHandler,
     LiveviewSession,
@@ -42,6 +43,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:tool_config, {:set_provider, provider_id}})
   end
 
+  def set_response_format(name, response_format) do
+    GenServer.call(via(name), {:tool_config, {:set_response_format, response_format}})
+  end
+
   def register_liveview_pid(name, liveview_pid) when is_pid(liveview_pid) do
     GenServer.call(via(name), {:session, {:register_liveview_pid, liveview_pid}})
   end
@@ -71,6 +76,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.cast(via(name), {:approval_decision, ref, decision})
   end
 
+  def get_pending_approvals(name) do
+    GenServer.call(via(name), {:session, :get_pending_approvals})
+  end
+
   def start_link(name: name) do
     GenServer.start_link(__MODULE__, name, name: via(name))
   end
@@ -93,6 +102,7 @@ defmodule ElixirAi.ChatRunner do
        liveview_tools: [],
        page_tools: [],
        provider: nil,
+       response_format: nil,
        liveview_pids: %{},
        loading: true
      }, {:continue, :load_from_db}}
@@ -159,7 +169,8 @@ defmodule ElixirAi.ChatRunner do
         messages_with_system_prompt(messages, system_prompt),
         server_tools ++ liveview_tools,
         provider,
-        tool_choice
+        tool_choice,
+        state.response_format
       )
     end
 
@@ -180,7 +191,7 @@ defmodule ElixirAi.ChatRunner do
   def handle_cast({:conversation, inner}, state), do: ConversationCalls.handle_cast(inner, state)
 
   def handle_cast({:approval_decision, ref, decision}, state) do
-    case Map.pop(state.pending_approvals, ref) do
+    case ApprovalTracker.resolve(state.pending_approvals, ref) do
       {nil, _} ->
         {:noreply, state}
 
@@ -207,8 +218,13 @@ defmodule ElixirAi.ChatRunner do
   def handle_info({:error, inner}, state), do: ErrorHandler.handle(inner, state)
   def handle_info({:finalize_response, _id} = msg, state), do: StreamHandler.handle(msg, state)
 
-  def handle_info({:register_pending_approval, ref, pid}, state) do
-    {:noreply, put_in(state, [:pending_approvals, ref], pid)}
+  def handle_info({:register_pending_approval, ref, pid, command, reason}, state) do
+    {:noreply,
+     %{
+       state
+       | pending_approvals:
+           ApprovalTracker.register(state.pending_approvals, ref, pid, command, reason)
+     }}
   end
 
   def handle_info({:DOWN, ref, :process, pid, reason}, state),

@@ -48,9 +48,6 @@ defmodule ElixirAiWeb.FormComponents do
   def toggle(assigns) do
     ~H"""
     <button id={@id} type="button" {@rest} class="flex items-center gap-1.5 cursor-pointer group">
-      <span class="text-xs text-seafoam-500 group-hover:text-seafoam-300 transition-colors capitalize">
-        {@label}
-      </span>
       <span class={[
         "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
         if(@checked, do: "bg-seafoam-500", else: "bg-seafoam-900/60")
@@ -59,6 +56,9 @@ defmodule ElixirAiWeb.FormComponents do
           "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform duration-200 ease-in-out",
           if(@checked, do: "translate-x-4", else: "translate-x-0")
         ]} />
+      </span>
+      <span class="text-xs text-seafoam-500 group-hover:text-seafoam-300 transition-colors capitalize">
+        {@label}
       </span>
     </button>
     """

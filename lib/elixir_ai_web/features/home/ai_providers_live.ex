@@ -29,35 +29,37 @@ defmodule ElixirAiWeb.AiProvidersLive do
         <% end %>
         <%= for provider <- @providers do %>
           <li class="p-4 rounded-lg border border-seafoam-900/40 bg-seafoam-950/20">
-            <div class="flex items-start justify-between">
-              <div class="flex-1">
-                <h3 class="text-sm font-medium text-seafoam-300">{provider.name}</h3>
-                <p class="text-xs text-seafoam-500 mt-1">Model: {provider.model_name}</p>
-                <p class="text-xs text-seafoam-700 mt-0.5">
-                  Added: {Calendar.strftime(provider.inserted_at, "%b %d, %Y %H:%M:%S.%f")}
-                </p>
-                <div class="mt-2 flex gap-4">
-                  <%= for cap <- AiProvider.valid_capabilities() do %>
-                    <.toggle
-                      id={"provider-#{provider.id}-cap-#{cap}"}
-                      checked={cap in (provider.capabilities || [])}
-                      label={cap}
-                      phx-click="toggle_capability"
-                      phx-value-id={provider.id}
-                      phx-value-capability={cap}
-                      phx-target={@myself}
-                    />
-                  <% end %>
+            <div class="flex items-start justify-between gap-4">
+              <div class="flex flex-col justify-between gap-4 flex-1 min-w-0">
+                <div>
+                  <h3 class="text-sm font-medium text-seafoam-300">{provider.name}</h3>
+                  <p class="text-xs text-seafoam-500 mt-1">Model: {provider.model_name}</p>
+                  <p class="text-xs text-seafoam-700 mt-0.5">
+                    Added: {Calendar.strftime(provider.inserted_at, "%b %d, %Y %H:%M:%S.%f")}
+                  </p>
                 </div>
+                <button
+                  phx-click="delete_provider"
+                  phx-value-id={provider.id}
+                  phx-target={@myself}
+                  class="self-start px-2 py-1 rounded text-xs border border-red-900/40 bg-red-950/20 text-red-400 hover:border-red-700 hover:bg-red-950/40 transition-colors"
+                >
+                  Delete
+                </button>
               </div>
-              <button
-                phx-click="delete_provider"
-                phx-value-id={provider.id}
-                phx-target={@myself}
-                class="ml-4 px-2 py-1 rounded text-xs border border-red-900/40 bg-red-950/20 text-red-400 hover:border-red-700 hover:bg-red-950/40 transition-colors"
-              >
-                Delete
-              </button>
+              <div class="flex flex-col gap-1.5 shrink-0">
+                <%= for cap <- AiProvider.valid_capabilities() do %>
+                  <.toggle
+                    id={"provider-#{provider.id}-cap-#{cap}"}
+                    checked={cap in (provider.capabilities || [])}
+                    label={cap}
+                    phx-click="toggle_capability"
+                    phx-value-id={provider.id}
+                    phx-value-capability={cap}
+                    phx-target={@myself}
+                  />
+                <% end %>
+              </div>
             </div>
           </li>
         <% end %>

@@ -226,15 +226,17 @@ defmodule ElixirAiWeb.ChatLive do
 
   def handle_info(
         :load_conversation,
-        %{assigns: %{runner_pid: pid, conversation_name: _name}} = socket
+        %{assigns: %{runner_pid: pid, conversation_name: name}} = socket
       ) do
     conversation = GenServer.call(pid, {:conversation, :get_conversation})
+    pending_approvals = ChatRunner.get_pending_approvals(name)
 
     socket =
       socket
       |> assign(messages: conversation.messages)
       |> assign(streaming_response: conversation.streaming_response)
       |> assign(provider: conversation.provider)
+      |> assign(pending_approvals: pending_approvals)
 
     # Now sync streaming state if there's an active stream
     if conversation.streaming_response do

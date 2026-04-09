@@ -142,9 +142,9 @@ defmodule ElixirAi.AiUtils.StreamLineUtils do
     send(server, {:stream, {:ai_tool_call_end, id}})
   end
 
-  def handle_stream_line(_server, %{"error" => error_info}) do
+  def handle_stream_line(server, %{"error" => error_info}) do
     Logger.error("Received error from AI stream: #{inspect(error_info)}")
-    :ok
+    send(server, {:stream, {:ai_request_error, error_info}})
   end
 
   def handle_stream_line(server, "proxy error" <> _ = error) when is_binary(error) do

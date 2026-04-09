@@ -98,6 +98,9 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
   def handle({:ai_request_error, reason}, socket) do
     error_message =
       case reason do
+        %{"message" => msg} ->
+          msg
+
         "proxy error" <> _ ->
           "Could not connect to AI provider. Please check your proxy and provider settings."
 

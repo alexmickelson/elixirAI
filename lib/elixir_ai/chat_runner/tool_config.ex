@@ -28,4 +28,8 @@ defmodule ElixirAi.ChatRunner.ToolConfig do
       error -> {:reply, error, state}
     end
   end
+
+  def handle_call({:set_response_format, response_format}, _from, state) do
+    {:reply, :ok, %{state | response_format: response_format}}
+  end
 end

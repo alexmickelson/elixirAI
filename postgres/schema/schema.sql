@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS capabilities (
   name  TEXT   NOT NULL UNIQUE
 );
 
-INSERT INTO capabilities (name) VALUES ('text'), ('image'), ('voice_assistant')
+INSERT INTO capabilities (name) VALUES ('text'), ('image'), ('voice_assistant'), ('shell_classification')
 ON CONFLICT (name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ai_providers (
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS tool_calls_request_messages (
   tool_name          TEXT        NOT NULL,
   tool_call_id       TEXT        NOT NULL UNIQUE,
   arguments          JSONB       NOT NULL,
+  approval_decision  TEXT        CHECK (approval_decision IN ('auto_allowed', 'approved', 'denied', 'timed_out')),
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

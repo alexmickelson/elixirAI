@@ -17,6 +17,7 @@ defmodule ElixirAi.AiTools do
   """
 
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
+  require Logger
 
   @server_tool_names ["store_thing", "read_thing", "list_conversations", "run"]
   @liveview_tool_names ["set_background_color", "navigate_to"]
@@ -85,54 +86,87 @@ defmodule ElixirAi.AiTools do
   end
 
   def run(server) do
-    ai_tool(
-      name: "run",
-      description: """
-      Execute a command in the sandboxed container. Supports full bash syntax
-      including pipes (|), chains (&&, ||), semicolons (;), and redirects.
+    schema = %{
+      "type" => "function",
+      "function" => %{
+        "name" => "run",
+        "description" => """
+        Execute a command in the sandboxed container. Supports full bash syntax
+        including pipes (|), chains (&&, ||), semicolons (;), and redirects.
 
-      One call can be a complete workflow:
-        cat log.txt | grep ERROR | wc -l
-        curl -sL $URL -o data.csv && head -5 data.csv
-        cat config.yaml || echo "not found, using defaults"
+        One call can be a complete workflow:
+          cat log.txt | grep ERROR | wc -l
+          curl -sL $URL -o data.csv && head -5 data.csv
+          cat config.yaml || echo "not found, using defaults"
 
-      Available tools in the sandbox:
-        cat, head, tail, less     — read files
-        grep, sed, awk            — filter and transform text
-        sort, uniq, wc, tr, cut   — text processing
-        find, ls, tree, file      — explore filesystem
-        curl, wget                — fetch URLs
-        jq                        — parse JSON
-        git                       — version control
-        bash                      — scripting
+        Available tools in the sandbox:
+          cat, head, tail, less     — read files
+          grep, sed, awk            — filter and transform text
+          sort, uniq, wc, tr, cut   — text processing
+          find, ls, tree, file      — explore filesystem
+          curl, wget                — fetch URLs
+          jq                        — parse JSON
+          git                       — version control
+          bash                      — scripting
 
-      Use --help on any command for detailed usage (e.g. "grep --help").
-      Large outputs are automatically truncated with a path to the full file.
-      """,
-      function: fn args ->
-        command = Map.fetch!(args, "command")
+        Use --help on any command for detailed usage (e.g. "grep --help").
+        Large outputs are automatically truncated with a path to the full file.
+        """,
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{
+            "command" => %{
+              "type" => "string",
+              "description" =>
+                "Shell command to execute (e.g. \"ls -la\", \"cat file.txt | grep foo\")"
+            }
+          },
+          "required" => ["command"]
+        }
+      }
+    }
 
-        case ElixirAi.CommandApproval.classify(command) do
-          :auto_allow ->
-            execute_command(command)
+    run_function = fn current_message_id, tool_call_id, args ->
+      Task.start_link(fn ->
+        try do
+          command = Map.fetch!(args, "command")
+          name = :sys.get_state(server).name
+          topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
 
-          {:needs_approval, reason} ->
-            request_approval(server, command, reason)
+          result =
+            case ElixirAi.CommandApproval.classify(command) do
+              :auto_allow ->
+                ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
+                  topic: topic
+                )
+
+                execute_command(command)
+
+              {:needs_approval, reason} ->
+                {decision, cmd_result} = request_approval(server, command, reason)
+
+                ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
+                  topic: topic
+                )
+
+                cmd_result
+            end
+
+          send(server, {:stream, {:tool_response, current_message_id, tool_call_id, result}})
+        rescue
+          e ->
+            reason = Exception.format(:error, e, __STACKTRACE__)
+            Logger.error("Tool task crashed: #{reason}")
+
+            send(
+              server,
+              {:stream, {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+            )
         end
-      end,
-      parameters: %{
-        "type" => "object",
-        "properties" => %{
-          "command" => %{
-            "type" => "string",
-            "description" =>
-              "Shell command to execute (e.g. \"ls -la\", \"cat file.txt | grep foo\")"
-          }
-        },
-        "required" => ["command"]
-      },
-      server: server
-    )
+      end)
+    end
+
+    %{name: "run", definition: schema, run_function: run_function}
   end
 
   defp execute_command(command) do
@@ -147,7 +181,7 @@ defmodule ElixirAi.AiTools do
 
   defp request_approval(server, command, reason) do
     ref = make_ref()
-    send(server, {:register_pending_approval, ref, self()})
+    send(server, {:register_pending_approval, ref, self(), command, reason})
 
     name = :sys.get_state(server).name
 
@@ -159,13 +193,14 @@ defmodule ElixirAi.AiTools do
 
     receive do
       {:approval_response, ^ref, :approved} ->
-        execute_command(command)
+        {:approved, execute_command(command)}
 
       {:approval_response, ^ref, :denied} ->
-        {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}
+        {:denied, {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}}
     after
       120_000 ->
-        {:ok, "[denied] Approval timed out after 2 minutes: #{command}\n[exit:1 | 0ms]"}
+        {:timed_out,
+         {:ok, "[denied] Approval timed out after 2 minutes: #{command}\n[exit:1 | 0ms]"}}
     end
   end
 
@@ -219,7 +254,7 @@ defmodule ElixirAi.AiTools do
           "path" => %{
             "type" => "string",
             "description" =>
-              "The application path to navigate to, e.g. \"/\", \"/admin\", \"/chat/my-chat\""
+              "The application path to navigate to, e.g. \"/\", \"/admin\", \"/chat/my-chat-id\""
           }
         },
         "required" => ["path"]

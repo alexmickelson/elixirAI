@@ -192,7 +192,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
         messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
         state.server_tools ++ state.liveview_tools ++ state.page_tools,
         state.provider,
-        state.tool_choice
+        state.tool_choice,
+        state.response_format
       )
     end
 

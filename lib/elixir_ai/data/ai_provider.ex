@@ -1,12 +1,13 @@
 defmodule ElixirAi.AiProvider do
   alias ElixirAi.Data.DbHelpers
+  alias ElixirAi.AiProviderCapabilities
   require Logger
   import ElixirAi.PubsubTopics
 
   defmodule AiProviderSchema do
     defstruct [:id, :name, :model_name, :api_token, :completions_url, :capabilities, :inserted_at]
 
-    def valid_capabilities, do: ["text", "image", "voice_assistant"]
+    def valid_capabilities, do: ["text", "image", "voice_assistant", "shell_classification"]
 
     def schema do
       Zoi.object(%{
@@ -21,7 +22,7 @@ defmodule ElixirAi.AiProvider do
     end
   end
 
-  def valid_capabilities, do: AiProviderSchema.valid_capabilities()
+  def valid_capabilities, do: AiProviderCapabilities.valid()
 
   def all do
     sql = """
@@ -61,7 +62,7 @@ defmodule ElixirAi.AiProvider do
 
   def create(attrs) do
     capabilities = attrs |> Map.get(:capabilities, [])
-    invalid_caps = capabilities |> Enum.reject(&(&1 in AiProviderSchema.valid_capabilities()))
+    invalid_caps = capabilities |> Enum.reject(&(&1 in AiProviderCapabilities.valid()))
 
     if invalid_caps != [] do
       {:error, {:invalid_capabilities, invalid_caps}}
@@ -102,7 +103,7 @@ defmodule ElixirAi.AiProvider do
         {:error, :db_error}
 
       [%{"id" => provider_id} | _] ->
-        case assign_capabilities(provider_id, capabilities) do
+        case AiProviderCapabilities.assign(provider_id, capabilities) do
           :ok ->
             Logger.info(
               "Provider created, broadcasting :provider_added message to topic #{providers_topic()}"
@@ -122,136 +123,10 @@ defmodule ElixirAi.AiProvider do
     end
   end
 
-  defp assign_capabilities(_provider_id, []), do: :ok
-
-  defp assign_capabilities(provider_id, capabilities) do
-    sql = """
-    INSERT INTO ai_provider_capabilities (ai_provider_id, capability_id)
-    SELECT $(provider_id), c.id
-    FROM capabilities c
-    WHERE c.name = ANY($(capabilities)::text[])
-    """
-
-    params = %{"provider_id" => provider_id, "capabilities" => capabilities}
-
-    case DbHelpers.run_sql(sql, params, providers_topic()) do
-      {:error, :db_error} -> {:error, :db_error}
-      _ -> :ok
-    end
-  end
-
-  def update_capabilities(id, capabilities) when is_list(capabilities) do
-    invalid_caps = Enum.reject(capabilities, &(&1 in AiProviderSchema.valid_capabilities()))
-
-    if invalid_caps != [] do
-      {:error, {:invalid_capabilities, invalid_caps}}
-    else
-      case Ecto.UUID.dump(id) do
-        {:ok, binary_id} ->
-          sql = """
-          WITH
-            stripped AS (
-              DELETE FROM ai_provider_capabilities apc
-              USING capabilities c
-              WHERE apc.capability_id = c.id
-                AND c.name = 'voice_assistant'
-                AND apc.ai_provider_id != $(id)
-                AND 'voice_assistant' = ANY($(capabilities)::text[])
-              RETURNING apc.ai_provider_id AS affected_id
-            ),
-            removed AS (
-              DELETE FROM ai_provider_capabilities apc
-              USING capabilities c
-              WHERE apc.capability_id = c.id
-                AND apc.ai_provider_id = $(id)
-                AND NOT (c.name = ANY($(capabilities)::text[]))
-              RETURNING apc.ai_provider_id
-            ),
-            inserted AS (
-              INSERT INTO ai_provider_capabilities (ai_provider_id, capability_id)
-              SELECT $(id), c.id
-              FROM capabilities c
-              WHERE c.name = ANY($(capabilities)::text[])
-              ON CONFLICT DO NOTHING
-            )
-          SELECT DISTINCT affected_id FROM stripped
-          """
-
-          params = %{"id" => binary_id, "capabilities" => capabilities}
-
-          case DbHelpers.run_sql(sql, params, providers_topic()) do
-            {:error, :db_error} ->
-              {:error, :db_error}
-
-            rows ->
-              other_ids =
-                rows
-                |> Enum.map(fn %{"affected_id" => bid} -> Ecto.UUID.cast!(bid) end)
-                |> Enum.uniq()
-
-              broadcast_capability_updates(id, other_ids)
-              :ok
-          end
-
-        :error ->
-          Logger.error("update_capabilities: invalid UUID #{inspect(id)}")
-          {:error, :invalid_uuid}
-      end
-    end
-  end
-
-  defp broadcast_capability_updates(id, other_affected_ids) do
-    [id | other_affected_ids]
-    |> Enum.uniq()
-    |> Enum.each(fn updated_id ->
-      Logger.info(
-        "Provider updated, broadcasting :provider_updated message to topic #{providers_topic()} for provider ID #{updated_id}"
-      )
-
-      Phoenix.PubSub.broadcast(
-        ElixirAi.PubSub,
-        providers_topic(),
-        {:provider_updated, updated_id}
-      )
-    end)
-  end
-
-  def find_by_capability(capability) when is_binary(capability) do
-    sql = """
-    SELECT
-      ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url,
-      COALESCE(array_agg(c.name) FILTER (WHERE c.name IS NOT NULL), '{}') AS capabilities
-    FROM ai_providers ap
-    LEFT JOIN ai_provider_capabilities apc ON apc.ai_provider_id = ap.id
-    LEFT JOIN capabilities c ON c.id = apc.capability_id
-    WHERE ap.id IN (
-      SELECT apc2.ai_provider_id
-      FROM ai_provider_capabilities apc2
-      JOIN capabilities c2 ON c2.id = apc2.capability_id
-      WHERE c2.name = $(capability)
-    )
-    GROUP BY ap.id, ap.name, ap.model_name, ap.api_token, ap.completions_url
-    LIMIT 1
-    """
-
-    params = %{"capability" => capability}
-
-    case DbHelpers.run_sql(sql, params, providers_topic(), AiProviderSchema.schema()) do
-      {:error, _} ->
-        {:error, :db_error}
-
-      [] ->
-        {:error, :not_found}
-
-      [row | _] ->
-        {:ok,
-         row
-         |> convert_uuid_to_string()
-         |> then(&struct(AiProviderSchema, &1))}
-    end
-  end
-
-  def get_voice_assistant, do: find_by_capability("voice_assistant")
+  defdelegate update_capabilities(id, capabilities), to: AiProviderCapabilities, as: :update
+  defdelegate find_by_capability(capability), to: AiProviderCapabilities, as: :find_provider
+  defdelegate get_voice_assistant(), to: AiProviderCapabilities
+  defdelegate get_shell_classifier(), to: AiProviderCapabilities
 
   def find_by_name(name) do
     sql = """

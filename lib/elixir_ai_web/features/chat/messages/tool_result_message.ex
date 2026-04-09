@@ -4,6 +4,26 @@ defmodule ElixirAiWeb.ToolResultMessage do
 
   defp max_width_class, do: "max-w-full xl:max-w-300"
 
+  defp parse_command_result(nil), do: :raw
+  defp parse_command_result(""), do: :raw
+
+  defp parse_command_result(content) do
+    case Regex.run(~r/^\{:([a-z][a-z0-9_]*),\s*"(.*)"\}$/s, content) do
+      [_, atom, inner] -> {:command, atom, unescape_string(inner)}
+      _ -> :raw
+    end
+  end
+
+  defp unescape_string(s) do
+    Regex.replace(~r/\\(n|t|r|\\|")/, s, fn
+      _, "n" -> "\n"
+      _, "t" -> "\t"
+      _, "r" -> "\r"
+      _, "\\" -> "\\"
+      _, "\"" -> "\""
+    end)
+  end
+
   attr :content, :string, required: true
   attr :tool_call_id, :string, required: true
 
@@ -26,10 +46,19 @@ defmodule ElixirAiWeb.ToolResultMessage do
             else: first_line
       end
 
+    {is_command, command_atom, command_body} =
+      case parse_command_result(assigns.content) do
+        {:command, atom, inner} -> {true, atom, inner}
+        :raw -> {false, nil, nil}
+      end
+
     assigns =
       assigns
       |> assign(:_id, id)
       |> assign(:_truncated, truncated)
+      |> assign(:_is_command, is_command)
+      |> assign(:_command_atom, command_atom)
+      |> assign(:_command_body, command_body)
 
     ~H"""
     <div class={"mb-1 #{max_width_class()} rounded-lg border border-seafoam-900/40 bg-seafoam-950/20 text-xs font-mono overflow-hidden"}>
@@ -73,7 +102,16 @@ defmodule ElixirAiWeb.ToolResultMessage do
         <span class="text-seafoam-800 text-[10px] truncate max-w-[12rem]">{@tool_call_id}</span>
       </div>
       <div id={"#{@_id}-body"} class="hidden px-3 py-2">
-        <pre class="text-seafoam-500/70 whitespace-pre-wrap break-all">{@content}</pre>
+        <pre :if={!@_is_command} class="text-seafoam-500/70 whitespace-pre-wrap break-all">{@content}</pre>
+        <div :if={@_is_command}>
+          <span class={[
+            "font-bold",
+            if(@_command_atom == "ok", do: "text-green-500", else: "text-red-400")
+          ]}>
+            {":" <> @_command_atom}
+          </span>
+          <pre class="text-seafoam-500/70 whitespace-pre-wrap break-all mt-1">{@_command_body}</pre>
+        </div>
       </div>
     </div>
     """

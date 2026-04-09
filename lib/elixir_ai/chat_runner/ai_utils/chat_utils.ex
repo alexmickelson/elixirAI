@@ -51,7 +51,14 @@ defmodule ElixirAi.ChatUtils do
     }
   end
 
-  def request_ai_response(server, messages, tools, provider, tool_choice \\ "auto") do
+  def request_ai_response(
+        server,
+        messages,
+        tools,
+        provider,
+        tool_choice \\ "auto",
+        response_format \\ nil
+      ) do
     Task.start_link(fn ->
       api_url = provider.completions_url
       api_key = provider.api_token
@@ -77,6 +84,9 @@ defmodule ElixirAi.ChatUtils do
         tools: Enum.map(tools, & &1.definition),
         tool_choice: tool_choice
       }
+
+      body =
+        if response_format, do: Map.put(body, :response_format, response_format), else: body
 
       headers = [{"authorization", "Bearer #{api_key}"}]
 
