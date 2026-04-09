@@ -8,6 +8,7 @@ defmodule ElixirAiWeb.ChatLive do
   import ElixirAiWeb.ToolResultMessage
   import ElixirAiWeb.ChatProviderDisplay
   alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
+  alias ElixirAiWeb.ConversationStreamHandler
   import ElixirAi.PubsubTopics
 
   @impl ElixirAi.AiControllable
@@ -243,8 +244,8 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, socket}
   end
 
-  def handle_info(:recovery_restart, socket) do
-    {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
+  def handle_info({:conversation_stream_message, msg}, socket) do
+    ConversationStreamHandler.handle(msg, socket)
   end
 
   def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
@@ -272,118 +273,6 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info(:sync_streaming, socket), do: {:noreply, socket}
-
-  def handle_info({:user_chat_message, message}, socket) do
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [message]))
-     |> push_event("scroll_to_bottom", %{})}
-  end
-
-  def handle_info(
-        {:start_ai_response_stream,
-         %{id: _id, reasoning_content: "", content: ""} = starting_response},
-        socket
-      ) do
-    {:noreply, assign(socket, streaming_response: starting_response)}
-  end
-
-  # chunk arrived before :start_ai_response_stream — fetch snapshot from runner and apply
-  def handle_info(
-        {:reasoning_chunk_content, reasoning_content},
-        %{assigns: %{streaming_response: nil}} = socket
-      ) do
-    base = get_snapshot(socket) |> Map.update!(:reasoning_content, &(&1 <> reasoning_content))
-    {:noreply, assign(socket, streaming_response: base)}
-  end
-
-  def handle_info({:reasoning_chunk_content, reasoning_content}, socket) do
-    updated_response = %{
-      socket.assigns.streaming_response
-      | reasoning_content:
-          socket.assigns.streaming_response.reasoning_content <> reasoning_content
-    }
-
-    # Update assign (controls toggle button visibility) and stream chunk to hook.
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated_response)
-     |> push_event("reasoning_chunk", %{chunk: reasoning_content})}
-  end
-
-  def handle_info(
-        {:text_chunk_content, text_content},
-        %{assigns: %{streaming_response: nil}} = socket
-      ) do
-    base = get_snapshot(socket) |> Map.update!(:content, &(&1 <> text_content))
-    {:noreply, assign(socket, streaming_response: base)}
-  end
-
-  def handle_info({:text_chunk_content, text_content}, socket) do
-    updated_response = %{
-      socket.assigns.streaming_response
-      | content: socket.assigns.streaming_response.content <> text_content
-    }
-
-    # Update assign (accumulated for final message) and stream chunk to hook.
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated_response)
-     |> push_event("md_chunk", %{chunk: text_content})}
-  end
-
-  def handle_info(:tool_calls_finished, socket) do
-    # Logger.info("Received tool_calls_finished")
-
-    {:noreply,
-     socket
-     |> assign(streaming_response: nil)}
-  end
-
-  def handle_info({:tool_request_message, tool_request_message}, socket) do
-    # Tool calls are now finalized in @messages — clear streaming_response so
-    # the streaming bubble doesn't render below the incoming tool results.
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [tool_request_message]))
-     |> assign(streaming_response: nil)}
-  end
-
-  def handle_info({:one_tool_finished, tool_response}, socket) do
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [tool_response]))}
-  end
-
-  def handle_info({:end_ai_response, final_message}, socket) do
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [final_message]))
-     |> assign(streaming_response: nil)}
-  end
-
-  def handle_info({:db_error, reason}, socket) do
-    {:noreply, assign(socket, db_error: reason)}
-  end
-
-  def handle_info({:ai_request_error, reason}, socket) do
-    error_message =
-      case reason do
-        "proxy error" <> _ ->
-          "Could not connect to AI provider. Please check your proxy and provider settings."
-
-        %{__struct__: mod, reason: r} ->
-          "#{inspect(mod)}: #{inspect(r)}"
-
-        msg when is_binary(msg) ->
-          msg
-
-        _ ->
-          inspect(reason)
-      end
-
-    {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}
-  end
 
   def handle_info({:liveview_tool_call, "set_background_color", %{"color" => color}}, socket) do
     {:noreply, assign(socket, background_color: color)}
@@ -417,21 +306,6 @@ defmodule ElixirAiWeb.ChatLive do
     end
 
     :ok
-  end
-
-  defp get_snapshot(%{assigns: %{runner_pid: pid}} = _socket) when is_pid(pid) do
-    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
-      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
-      snapshot -> snapshot
-    end
-  end
-
-  defp get_snapshot(socket) do
-    ChatRunner.get_streaming_response(socket.assigns.conversation_name)
-    |> case do
-      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
-      snapshot -> snapshot
-    end
   end
 
   defp encode_ref(ref), do: ref |> :erlang.term_to_binary() |> Base.url_encode64()

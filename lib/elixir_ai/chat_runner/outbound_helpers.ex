@@ -2,7 +2,12 @@ defmodule ElixirAi.ChatRunner.OutboundHelpers do
   import ElixirAi.PubsubTopics
 
   def broadcast_ui(name, msg),
-    do: Phoenix.PubSub.broadcast(ElixirAi.PubSub, chat_topic(name), msg)
+    do:
+      Phoenix.PubSub.broadcast(
+        ElixirAi.PubSub,
+        chat_topic(name),
+        {:conversation_stream_message, msg}
+      )
 
   def store_message(name, messages) when is_list(messages) do
     Enum.each(messages, &store_message(name, &1))

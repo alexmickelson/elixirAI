@@ -5,6 +5,7 @@ defmodule ElixirAiWeb.VoiceLive do
   alias ElixirAiWeb.Voice.Recording
   alias ElixirAiWeb.Voice.VoiceConversation
   alias ElixirAi.{AiProvider, AiTools, ChatRunner, ConversationManager}
+  alias ElixirAiWeb.ConversationStreamHandler
   import ElixirAi.PubsubTopics
 
   def mount(_params, session, socket) do
@@ -45,15 +46,19 @@ defmodule ElixirAiWeb.VoiceLive do
       <% else %>
         <div class={[
           "fixed top-4 right-4 z-50 bg-seafoam-900 border border-seafoam-800 rounded-2xl shadow-2xl flex flex-col backdrop-blur",
-          if(@state == :transcribed, do: "w-96 max-h-[80vh]", else: "w-72")
+          if(@state == :transcribed or @conversation_name != nil,
+            do: "w-96 max-h-[80vh]",
+            else: "w-72"
+          )
         ]}>
-          <%= if @state == :transcribed do %>
+          <%= if @state == :transcribed or @conversation_name != nil do %>
             <VoiceConversation.voice_conversation
               messages={@messages}
               streaming_response={@streaming_response}
               ai_error={@ai_error}
             />
-          <% else %>
+          <% end %>
+          <%= if @state != :transcribed do %>
             <Recording.recording state={@state} />
           <% end %>
         </div>
@@ -153,105 +158,10 @@ defmodule ElixirAiWeb.VoiceLive do
      assign(socket, state: :transcribed, ai_error: "Transcription failed: #{inspect(reason)}")}
   end
 
-  # --- Chat PubSub handlers (same pattern as ChatLive) ---
+  # --- Conversation stream PubSub handlers ---
 
-  def handle_info({:user_chat_message, message}, socket) do
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [message]))
-     |> push_event("scroll_to_bottom", %{})}
-  end
-
-  def handle_info(
-        {:start_ai_response_stream,
-         %{id: _id, reasoning_content: "", content: ""} = starting_response},
-        socket
-      ) do
-    {:noreply, assign(socket, streaming_response: starting_response)}
-  end
-
-  def handle_info(
-        {:reasoning_chunk_content, reasoning_content},
-        %{assigns: %{streaming_response: nil}} = socket
-      ) do
-    base = get_snapshot(socket) |> Map.update!(:reasoning_content, &(&1 <> reasoning_content))
-    {:noreply, assign(socket, streaming_response: base)}
-  end
-
-  def handle_info({:reasoning_chunk_content, reasoning_content}, socket) do
-    updated_response = %{
-      socket.assigns.streaming_response
-      | reasoning_content:
-          socket.assigns.streaming_response.reasoning_content <> reasoning_content
-    }
-
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated_response)
-     |> push_event("reasoning_chunk", %{chunk: reasoning_content})}
-  end
-
-  def handle_info(
-        {:text_chunk_content, text_content},
-        %{assigns: %{streaming_response: nil}} = socket
-      ) do
-    base = get_snapshot(socket) |> Map.update!(:content, &(&1 <> text_content))
-    {:noreply, assign(socket, streaming_response: base)}
-  end
-
-  def handle_info({:text_chunk_content, text_content}, socket) do
-    updated_response = %{
-      socket.assigns.streaming_response
-      | content: socket.assigns.streaming_response.content <> text_content
-    }
-
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated_response)
-     |> push_event("md_chunk", %{chunk: text_content})}
-  end
-
-  def handle_info(:tool_calls_finished, socket) do
-    {:noreply, assign(socket, streaming_response: nil)}
-  end
-
-  def handle_info({:tool_request_message, tool_request_message}, socket) do
-    {:noreply, update(socket, :messages, &(&1 ++ [tool_request_message]))}
-  end
-
-  def handle_info({:one_tool_finished, tool_response}, socket) do
-    {:noreply, update(socket, :messages, &(&1 ++ [tool_response]))}
-  end
-
-  def handle_info({:end_ai_response, final_message}, socket) do
-    {:noreply,
-     socket
-     |> update(:messages, &(&1 ++ [final_message]))
-     |> assign(streaming_response: nil)}
-  end
-
-  def handle_info({:ai_request_error, reason}, socket) do
-    error_message =
-      case reason do
-        "proxy error" <> _ ->
-          "Could not connect to AI provider. Please check your proxy and provider settings."
-
-        %{__struct__: mod, reason: r} ->
-          "#{inspect(mod)}: #{inspect(r)}"
-
-        msg when is_binary(msg) ->
-          msg
-
-        _ ->
-          inspect(reason)
-      end
-
-    {:noreply, assign(socket, ai_error: error_message, streaming_response: nil)}
-  end
-
-  def handle_info({:db_error, reason}, socket) do
-    Logger.error("VoiceLive: db error: #{inspect(reason)}")
-    {:noreply, socket}
+  def handle_info({:conversation_stream_message, msg}, socket) do
+    ConversationStreamHandler.handle(msg, socket)
   end
 
   def handle_info({:liveview_tool_call, "navigate_to", %{"path" => path}}, socket) do
@@ -286,10 +196,6 @@ defmodule ElixirAiWeb.VoiceLive do
   end
 
   def handle_info(:sync_streaming, socket), do: {:noreply, socket}
-
-  def handle_info(:recovery_restart, socket) do
-    {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
-  end
 
   # --- Private helpers ---
 
@@ -405,17 +311,6 @@ defmodule ElixirAiWeb.VoiceLive do
           ai_error: "Failed to connect to conversation: process unavailable"
         )
     end
-  end
-
-  defp get_snapshot(%{assigns: %{runner_pid: pid}}) when is_pid(pid) do
-    case GenServer.call(pid, {:conversation, :get_streaming_response}) do
-      nil -> %{id: nil, content: "", reasoning_content: "", tool_calls: []}
-      snapshot -> snapshot
-    end
-  end
-
-  defp get_snapshot(_socket) do
-    %{id: nil, content: "", reasoning_content: "", tool_calls: []}
   end
 
   defp discover_and_build_page_tools(socket, runner_pid) do
