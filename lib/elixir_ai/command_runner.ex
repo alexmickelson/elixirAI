@@ -25,11 +25,17 @@ defmodule ElixirAi.CommandRunner do
 
     # Wrap command to capture stderr separately via temp file + marker.
     # This ensures stderr is NEVER dropped.
+    # NOTE: wrapped is passed directly as a bash script argument via System.cmd
+    # (no intermediate shell), so we do NOT use sh -c '...' quoting here.
+    # Using sh -c with single-quote wrapping breaks commands that contain
+    # single quotes, such as heredocs with quoted delimiters (<< 'EOF').
     wrapped =
-      ~s|sh -c '{ #{shell_command} ; } 2>/tmp/.cmd_stderr; __exit=$?; | <>
-        ~s|if [ -s /tmp/.cmd_stderr ]; then | <>
-        ~s|printf "\\n#{@stderr_marker}\\n"; cat /tmp/.cmd_stderr; fi; | <>
-        ~s|exit $__exit'|
+      "{\n#{shell_command}\n} 2>/tmp/.cmd_stderr\n" <>
+        "__exit=$?\n" <>
+        "if [ -s /tmp/.cmd_stderr ]; then\n" <>
+        "printf \"\\n#{@stderr_marker}\\n\"; cat /tmp/.cmd_stderr\n" <>
+        "fi\n" <>
+        "exit $__exit"
 
     docker_args = ["exec", container, "bash", "-c", wrapped]
 

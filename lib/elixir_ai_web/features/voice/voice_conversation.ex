@@ -3,12 +3,13 @@ defmodule ElixirAiWeb.Voice.VoiceConversation do
   alias Phoenix.LiveView.JS
   import ElixirAiWeb.UserMessage
   import ElixirAiWeb.AssistantMessage
-  import ElixirAiWeb.ToolResultMessage
+  import ElixirAiWeb.ToolMessages
   import ElixirAiWeb.Spinner
 
   attr :messages, :list, required: true
   attr :streaming_response, :any, default: nil
   attr :ai_error, :string, default: nil
+  attr :db_error, :any, default: nil
 
   def voice_conversation(assigns) do
     ~H"""
@@ -39,26 +40,31 @@ defmodule ElixirAiWeb.Voice.VoiceConversation do
           AI error: {@ai_error}
         </div>
       <% end %>
+      <%= if @db_error do %>
+        <div class="mx-4 mt-1 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
+          Database error: {inspect(@db_error)}
+        </div>
+      <% end %>
       <div
         id="voice-chat-messages"
         phx-hook="ScrollBottom"
         class="flex-1 overflow-y-auto px-4 py-2 space-y-1"
       >
-        <%= for msg <- @messages do %>
-          <%= cond do %>
-            <% msg.role == :user -> %>
-              <.user_message content={Map.get(msg, :content) || ""} />
-            <% msg.role == :tool -> %>
-              <.tool_result_message
-                content={Map.get(msg, :content) || ""}
-                tool_call_id={Map.get(msg, :tool_call_id) || ""}
-              />
-            <% true -> %>
-              <.assistant_message
-                content={Map.get(msg, :content) || ""}
-                reasoning_content={Map.get(msg, :reasoning_content)}
-                tool_calls={Map.get(msg, :tool_calls) || []}
-              />
+        <%= for item <- group_messages(@messages) do %>
+          <%= case item do %>
+            <% {:tool_exchange, tc, result} -> %>
+              <.tool_message tool_call={tc} result={result} />
+            <% {:plain, msg} -> %>
+              <%= cond do %>
+                <% msg.role == :user -> %>
+                  <.user_message content={Map.get(msg, :content) || ""} />
+                <% true -> %>
+                  <.assistant_message
+                    content={Map.get(msg, :content) || ""}
+                    reasoning_content={Map.get(msg, :reasoning_content)}
+                    tool_calls={Map.get(msg, :tool_calls) || []}
+                  />
+              <% end %>
           <% end %>
         <% end %>
         <%= if @streaming_response do %>

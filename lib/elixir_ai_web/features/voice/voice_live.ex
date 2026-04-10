@@ -21,6 +21,7 @@ defmodule ElixirAiWeb.VoiceLive do
        streaming_response: nil,
        runner_pid: nil,
        ai_error: nil,
+       db_error: nil,
        voice_session_id: voice_session_id
      ), layout: false}
   end
@@ -56,6 +57,7 @@ defmodule ElixirAiWeb.VoiceLive do
               messages={@messages}
               streaming_response={@streaming_response}
               ai_error={@ai_error}
+              db_error={@db_error}
             />
           <% end %>
           <%= if @state != :transcribed do %>
@@ -127,7 +129,8 @@ defmodule ElixirAiWeb.VoiceLive do
        messages: [],
        streaming_response: nil,
        runner_pid: nil,
-       ai_error: nil
+       ai_error: nil,
+       db_error: nil
      )}
   end
 

@@ -11,9 +11,12 @@ defmodule ElixirAi.CommandApproval do
     "type" => "object",
     "properties" => %{
       "needs_approval" => %{"type" => "boolean"},
-      "reason" => %{"type" => "string"}
+      "justification" => %{
+        "type" => "string",
+        "description" => "One sentence explaining why this command is or is not approved."
+      }
     },
-    "required" => ["needs_approval", "reason"],
+    "required" => ["needs_approval", "justification"],
     "additionalProperties" => false
   }
 
@@ -40,11 +43,13 @@ defmodule ElixirAi.CommandApproval do
     messages = [%{role: :user, content: "Command: #{command}"}]
 
     with {:ok, provider} <- AiProvider.get_shell_classifier(),
-         {:ok, %{"needs_approval" => needs_approval, "reason" => reason}} <-
+         {:ok, %{"needs_approval" => needs_approval, "justification" => justification}} <-
            StructuredResponse.request(messages, provider, "command_approval", @schema,
              system_prompt: @system_prompt
            ) do
-      if needs_approval, do: {:needs_approval, reason}, else: :auto_allow
+      if needs_approval,
+        do: {:needs_approval, justification},
+        else: {:auto_allow, justification}
     else
       error ->
         Logger.warning("CommandApproval AI check failed: #{inspect(error)}, requiring approval")

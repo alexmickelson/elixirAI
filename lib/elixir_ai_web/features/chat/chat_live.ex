@@ -5,7 +5,7 @@ defmodule ElixirAiWeb.ChatLive do
   import ElixirAiWeb.Spinner
   import ElixirAiWeb.UserMessage
   import ElixirAiWeb.AssistantMessage
-  import ElixirAiWeb.ToolResultMessage
+  import ElixirAiWeb.ToolMessages
   import ElixirAiWeb.ChatProviderDisplay
   alias ElixirAi.{AiProvider, ChatRunner, ConversationManager}
   alias ElixirAiWeb.ConversationStreamHandler
@@ -118,24 +118,24 @@ defmodule ElixirAiWeb.ChatLive do
         <%= if @messages == [] do %>
           <p class="text-sm text-center mt-4">No messages yet.</p>
         <% end %>
-        <%= for msg <- @messages do %>
-          <%= cond do %>
-            <% msg.role == :user -> %>
-              <.user_message content={Map.get(msg, :content) || ""} />
-            <% msg.role == :tool -> %>
-              <.tool_result_message
-                content={Map.get(msg, :content) || ""}
-                tool_call_id={Map.get(msg, :tool_call_id) || ""}
-              />
-            <% true -> %>
-              <.assistant_message
-                content={Map.get(msg, :content) || ""}
-                reasoning_content={Map.get(msg, :reasoning_content)}
-                tool_calls={Map.get(msg, :tool_calls) || []}
-                input_tokens={Map.get(msg, :input_tokens)}
-                output_tokens={Map.get(msg, :output_tokens)}
-                tokens_per_second={Map.get(msg, :tokens_per_second)}
-              />
+        <%= for item <- group_messages(@messages) do %>
+          <%= case item do %>
+            <% {:tool_exchange, tc, result} -> %>
+              <.tool_message tool_call={tc} result={result} />
+            <% {:plain, msg} -> %>
+              <%= cond do %>
+                <% msg.role == :user -> %>
+                  <.user_message content={Map.get(msg, :content) || ""} />
+                <% true -> %>
+                  <.assistant_message
+                    content={Map.get(msg, :content) || ""}
+                    reasoning_content={Map.get(msg, :reasoning_content)}
+                    tool_calls={Map.get(msg, :tool_calls) || []}
+                    input_tokens={Map.get(msg, :input_tokens)}
+                    output_tokens={Map.get(msg, :output_tokens)}
+                    tokens_per_second={Map.get(msg, :tokens_per_second)}
+                  />
+              <% end %>
           <% end %>
         <% end %>
         <%= for approval <- @pending_approvals do %>
@@ -143,7 +143,14 @@ defmodule ElixirAiWeb.ChatLive do
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-400">
               Command requires approval
             </p>
-            <p class="mt-0.5 text-xs text-amber-600/80">{approval.reason}</p>
+            <div
+              id={"approval-reason-#{encode_ref(approval.ref)}"}
+              phx-hook="MarkdownRender"
+              phx-update="ignore"
+              data-md={approval.reason}
+              class="mt-0.5 text-xs text-amber-600/80 markdown"
+            >
+            </div>
             <pre class="mt-2 overflow-x-auto rounded bg-black/30 px-3 py-2 text-xs font-mono text-amber-300/80"><%= approval.command %></pre>
             <div class="mt-3 flex gap-2">
               <button

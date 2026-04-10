@@ -19,7 +19,7 @@ defmodule ElixirAiWeb.ChatLiveTest do
     Phoenix.PubSub.broadcast(
       ElixirAi.PubSub,
       chat_topic("test_conv"),
-      {:db_error, "unique constraint violated"}
+      {:conversation_stream_message, {:db_error, "unique constraint violated"}}
     )
 
     assert render(view) =~ "unique constraint violated"

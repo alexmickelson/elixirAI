@@ -17,6 +17,7 @@ defmodule ElixirAi.AiTools do
   """
 
   import ElixirAi.ChatUtils, only: [ai_tool: 1]
+  import ElixirAi.PubsubTopics, only: [chat_topic: 1]
   require Logger
 
   @server_tool_names ["store_thing", "read_thing", "list_conversations", "run"]
@@ -135,18 +136,34 @@ defmodule ElixirAi.AiTools do
 
           result =
             case ElixirAi.CommandApproval.classify(command) do
-              :auto_allow ->
+              {:auto_allow, justification} ->
                 ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
+                  justification: justification,
                   topic: topic
+                )
+
+                Phoenix.PubSub.broadcast(
+                  ElixirAi.PubSub,
+                  chat_topic(name),
+                  {:conversation_stream_message,
+                   {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
                 )
 
                 execute_command(command)
 
-              {:needs_approval, reason} ->
-                {decision, cmd_result} = request_approval(server, command, reason)
+              {:needs_approval, justification} ->
+                {decision, cmd_result} = request_approval(server, command, justification)
 
                 ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
+                  justification: justification,
                   topic: topic
+                )
+
+                Phoenix.PubSub.broadcast(
+                  ElixirAi.PubSub,
+                  chat_topic(name),
+                  {:conversation_stream_message,
+                   {:tool_approval_updated, tool_call_id, Atom.to_string(decision), justification}}
                 )
 
                 cmd_result

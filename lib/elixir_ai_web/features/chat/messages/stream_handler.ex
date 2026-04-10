@@ -131,7 +131,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       role: :assistant,
       content: state.streaming_response.content,
       reasoning_content: state.streaming_response.reasoning_content,
-      tool_calls: state.streaming_response.tool_calls
+      tool_calls: Enum.map(state.streaming_response.tool_calls, &Map.delete(&1, :index))
     }
 
     broadcast_ui(state.name, {:tool_request_message, tool_request_message})

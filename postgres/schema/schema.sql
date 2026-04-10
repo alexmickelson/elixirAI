@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS tool_calls_request_messages (
   tool_name          TEXT        NOT NULL,
   tool_call_id       TEXT        NOT NULL UNIQUE,
   arguments          JSONB       NOT NULL,
-  approval_decision  TEXT        CHECK (approval_decision IN ('auto_allowed', 'approved', 'denied', 'timed_out')),
+  approval_decision       TEXT        CHECK (approval_decision IN ('auto_allowed', 'approved', 'denied', 'timed_out')),
+  approval_justification  TEXT,
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

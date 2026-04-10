@@ -88,6 +88,28 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
     {:noreply, update(socket, :messages, &(&1 ++ [tool_response]))}
   end
 
+  def handle({:tool_approval_updated, tool_call_id, decision, justification}, socket) do
+    updated_messages =
+      Enum.map(socket.assigns.messages, fn msg ->
+        case msg do
+          %{role: :assistant, tool_calls: tool_calls} when is_list(tool_calls) ->
+            updated_calls =
+              Enum.map(tool_calls, fn tc ->
+                if tc.id == tool_call_id,
+                  do: Map.merge(tc, %{approval_decision: decision, approval_justification: justification}),
+                  else: tc
+              end)
+
+            %{msg | tool_calls: updated_calls}
+
+          other ->
+            other
+        end
+      end)
+
+    {:noreply, assign(socket, messages: updated_messages)}
+  end
+
   def handle({:end_ai_response, final_message}, socket) do
     {:noreply,
      socket

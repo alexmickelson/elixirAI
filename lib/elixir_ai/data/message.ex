@@ -52,6 +52,7 @@ defmodule ElixirAi.Message do
       tool_call_id: Zoi.string(),
       arguments: Zoi.any(),
       approval_decision: Zoi.nullish(Zoi.string()),
+      approval_justification: Zoi.nullish(Zoi.string()),
       inserted_at: Zoi.any()
     })
   end
@@ -103,7 +104,9 @@ defmodule ElixirAi.Message do
                 %{
                   id: row.tool_call_id,
                   name: row.tool_name,
-                  arguments: row.arguments
+                  arguments: row.arguments,
+                  approval_decision: row.approval_decision,
+                  approval_justification: row.approval_justification
                 }
               ]
             }
@@ -170,6 +173,7 @@ defmodule ElixirAi.Message do
       tc.tool_call_id,
       tc.arguments,
       tc.approval_decision,
+      tc.approval_justification,
       tc.inserted_at
     FROM tool_calls_request_messages tc
     JOIN text_messages tm ON tc.text_message_id = tm.id
@@ -232,14 +236,22 @@ defmodule ElixirAi.Message do
     end
   end
 
-  def update_approval_decision(tool_call_id, decision, topic: topic) do
+  def update_approval_decision(tool_call_id, decision, opts) do
+    topic = Keyword.fetch!(opts, :topic)
+    justification = Keyword.get(opts, :justification)
+
     sql = """
     UPDATE tool_calls_request_messages
-    SET approval_decision = $(decision)
+    SET approval_decision = $(decision),
+        approval_justification = $(justification)
     WHERE tool_call_id = $(tool_call_id)
     """
 
-    params = %{"tool_call_id" => tool_call_id, "decision" => decision}
+    params = %{
+      "tool_call_id" => tool_call_id,
+      "decision" => decision,
+      "justification" => justification
+    }
 
     case DbHelpers.run_sql(sql, params, topic) do
       {:error, :db_error} ->
