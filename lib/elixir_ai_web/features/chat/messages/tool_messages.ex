@@ -12,9 +12,12 @@ defmodule ElixirAiWeb.ToolMessages do
   attr :result, :map, default: nil
 
   def tool_message(%{tool_call: tool_call} = assigns) do
+    result_is_error = Map.get(assigns.result || %{}, :is_error, false)
+
     state =
       cond do
         Map.has_key?(tool_call, :error) -> :error
+        result_is_error -> :error
         Map.has_key?(tool_call, :index) -> :pending
         assigns.result != nil -> :success
         true -> :called
@@ -25,6 +28,8 @@ defmodule ElixirAiWeb.ToolMessages do
         %{content: c} -> c
         nil -> nil
       end
+
+    error = tool_call[:error] || (result_is_error && result_content)
 
     {is_cmd, cmd_atom, cmd_body} = parse_command_result(result_content)
     id = "tm-#{:erlang.phash2({tool_call[:id], tool_call.name, tool_call[:arguments]})}"
@@ -43,7 +48,7 @@ defmodule ElixirAiWeb.ToolMessages do
       |> assign(:_cmd_atom, cmd_atom)
       |> assign(:_cmd_body, cmd_body)
       |> assign(:_truncated, truncate_args(tool_call[:arguments]))
-      |> assign(:_error, tool_call[:error])
+      |> assign(:_error, error)
 
     ~H"""
     <div
@@ -165,7 +170,7 @@ defmodule ElixirAiWeb.ToolMessages do
         </p>
       </div>
     <% end %>
-    <%= if @result_content do %>
+    <%= if @result_content && @state != :error do %>
       <div class="px-3 py-2 border-t border-seafoam-900/40">
         <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
         <%= if @is_cmd do %>

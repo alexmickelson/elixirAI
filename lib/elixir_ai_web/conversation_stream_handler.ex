@@ -96,7 +96,11 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
             updated_calls =
               Enum.map(tool_calls, fn tc ->
                 if tc.id == tool_call_id,
-                  do: Map.merge(tc, %{approval_decision: decision, approval_justification: justification}),
+                  do:
+                    Map.merge(tc, %{
+                      approval_decision: decision,
+                      approval_justification: justification
+                    }),
                   else: tc
               end)
 
@@ -115,6 +119,13 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
      socket
      |> update(:messages, &(&1 ++ [final_message]))
      |> assign(streaming_response: nil)}
+  end
+
+  def handle({:inline_error_message, error_message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [error_message]))
+     |> push_event("scroll_to_bottom", %{})}
   end
 
   def handle({:ai_request_error, reason}, socket) do
@@ -145,6 +156,17 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
 
   def handle(:recovery_restart, socket) do
     {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
+  end
+
+  def handle(:stopped, socket) do
+    {:noreply, assign(socket, streaming_response: nil)}
+  end
+
+  def handle({:stopped, partial_message}, socket) do
+    {:noreply,
+     socket
+     |> update(:messages, &(&1 ++ [partial_message]))
+     |> assign(streaming_response: nil)}
   end
 
   # ---------------------------------------------------------------------------

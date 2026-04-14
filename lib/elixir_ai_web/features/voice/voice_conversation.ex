@@ -56,6 +56,8 @@ defmodule ElixirAiWeb.Voice.VoiceConversation do
               <.tool_message tool_call={tc} result={result} />
             <% {:plain, msg} -> %>
               <%= cond do %>
+                <% msg.role == :error -> %>
+                  <.error_message content={msg.content} />
                 <% msg.role == :user -> %>
                   <.user_message content={Map.get(msg, :content) || ""} />
                 <% true -> %>

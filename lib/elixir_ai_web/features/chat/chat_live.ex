@@ -127,6 +127,8 @@ defmodule ElixirAiWeb.ChatLive do
                 <.tool_message tool_call={tc} result={result} />
               <% {:plain, msg} -> %>
                 <%= cond do %>
+                  <% msg.role == :error -> %>
+                    <.error_message content={msg.content} />
                   <% msg.role == :user -> %>
                     <.user_message content={Map.get(msg, :content) || ""} />
                   <% true -> %>
@@ -137,6 +139,7 @@ defmodule ElixirAiWeb.ChatLive do
                       input_tokens={Map.get(msg, :input_tokens)}
                       output_tokens={Map.get(msg, :output_tokens)}
                       tokens_per_second={Map.get(msg, :tokens_per_second)}
+                      interrupted={Map.get(msg, :interrupted) || false}
                     />
                 <% end %>
             <% end %>
@@ -197,9 +200,19 @@ defmodule ElixirAiWeb.ChatLive do
           conversation_name={@conversation_name}
           runner_pid={assigns[:runner_pid]}
         />
-        <button type="submit" class="px-4 py-2 rounded text-sm border">
-          Send
-        </button>
+        <%= if runner_active?(@runner_status) do %>
+          <button
+            type="button"
+            phx-click="stop_conversation"
+            class="px-4 py-2 rounded text-sm border border-red-800/50 text-red-400 hover:bg-red-950/40 transition-colors"
+          >
+            Stop
+          </button>
+        <% else %>
+          <button type="submit" class="px-4 py-2 rounded text-sm border">
+            Send
+          </button>
+        <% end %>
       </form>
     </div>
     """
@@ -218,8 +231,17 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_event("submit", %{"user_input" => user_input}, socket) when user_input != "" do
-    ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
-    {:noreply, assign(socket, user_input: "")}
+    if runner_active?(socket.assigns.runner_status) do
+      {:noreply, socket}
+    else
+      ChatRunner.new_user_message(socket.assigns.conversation_name, user_input)
+      {:noreply, assign(socket, user_input: "")}
+    end
+  end
+
+  def handle_event("stop_conversation", _params, socket) do
+    ChatRunner.stop_conversation(socket.assigns.conversation_name)
+    {:noreply, socket}
   end
 
   def handle_event("approve_command", %{"ref" => ref_string}, socket) do
@@ -351,10 +373,16 @@ defmodule ElixirAiWeb.ChatLive do
       {:tool_request_message, _} -> :awaiting_tools
       :tool_calls_finished -> :generating_ai_response
       {:ai_request_error, _} -> :error
+      {:inline_error_message, _} -> :error
       :recovery_restart -> :generating_ai_response
+      :stopped -> :idle
+      {:stopped, _} -> :idle
       _ -> current
     end
   end
+
+  defp runner_active?(status),
+    do: status in [:generating_ai_response, :awaiting_tools, :pending_approval, :initial_startup]
 
   attr :status, :atom, default: nil
 

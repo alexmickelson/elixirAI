@@ -154,12 +154,20 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
           {:error, e} ->
             error_msg = "Failed to decode tool arguments: #{inspect(e)}"
             Logger.error("Tool call #{tool_call.name} failed: #{error_msg}")
-            {[%{role: :tool, content: error_msg, tool_call_id: tool_call.id} | failed], pending}
+
+            {[
+               %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
+               | failed
+             ], pending}
 
           nil ->
             error_msg = "No tool definition found for #{tool_call.name}"
             Logger.error(error_msg)
-            {[%{role: :tool, content: error_msg, tool_call_id: tool_call.id} | failed], pending}
+
+            {[
+               %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
+               | failed
+             ], pending}
         end
       end)
 
@@ -176,6 +184,46 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
          streaming_response: nil,
          pending_tool_calls: pending_call_ids,
          current_status: :awaiting_tools
+     }}
+  end
+
+  def handle({:tool_response, _id, tool_call_id, {:error, reason}}, state) do
+    error_content = if is_binary(reason), do: reason, else: inspect(reason)
+
+    new_message = %{
+      role: :tool,
+      content: error_content,
+      tool_call_id: tool_call_id,
+      is_error: true
+    }
+
+    broadcast_ui(state.name, {:one_tool_finished, new_message})
+    store_message(state.conversation_id, state.name, new_message)
+
+    new_pending_tool_calls =
+      Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
+
+    if new_pending_tool_calls == [] do
+      broadcast_ui(state.name, :tool_calls_finished)
+
+      ElixirAi.ChatUtils.request_ai_response(
+        self(),
+        messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
+        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        state.provider,
+        state.tool_choice,
+        state.response_format
+      )
+    end
+
+    {:noreply,
+     %{
+       state
+       | pending_tool_calls: new_pending_tool_calls,
+         streaming_response: nil,
+         current_status:
+           if(new_pending_tool_calls == [], do: :generating_ai_response, else: :awaiting_tools),
+         messages: state.messages ++ [new_message]
      }}
   end
 
@@ -214,9 +262,20 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
 
   def handle({:ai_request_error, reason}, state) do
     Logger.error("AI request error: #{inspect(reason)}")
-    broadcast_ui(state.name, {:ai_request_error, reason})
+    error_message = %{role: :error, content: format_error(reason)}
+    broadcast_ui(state.name, {:inline_error_message, error_message})
     {:noreply, %{state | streaming_response: nil, pending_tool_calls: [], current_status: :error}}
   end
+
+  defp format_error(%{"message" => msg}), do: msg
+
+  defp format_error("proxy error" <> _),
+    do: "Could not connect to AI provider. Please check your proxy and provider settings."
+
+  defp format_error(%{__struct__: _, reason: :timeout}), do: "Request timed out"
+  defp format_error(%{__struct__: mod, reason: r}), do: "#{inspect(mod)}: #{inspect(r)}"
+  defp format_error(msg) when is_binary(msg), do: msg
+  defp format_error(reason), do: inspect(reason)
 
   # Fallback fired ~1.5 s after finish_reason: stop for providers that never
   # send a usage chunk. No-op if the usage chunk already finalized the message.

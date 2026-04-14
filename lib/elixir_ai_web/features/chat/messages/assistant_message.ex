@@ -6,11 +6,36 @@ defmodule ElixirAiWeb.AssistantMessage do
   defp max_width_class, do: "max-w-full xl:max-w-300"
 
   attr :content, :string, required: true
+
+  def error_message(assigns) do
+    ~H"""
+    <div class="mb-2 text-sm text-left min-w-0">
+      <div class={"w-fit px-3 py-2 rounded-lg #{max_width_class()} flex items-start gap-2 bg-red-950/40 border border-red-900/50 text-red-400"}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-4 h-4 shrink-0 mt-0.5"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+            clip-rule="evenodd"
+          />
+        </svg>
+        <span>{@content}</span>
+      </div>
+    </div>
+    """
+  end
+
+  attr :content, :string, required: true
   attr :reasoning_content, :string, default: nil
   attr :tool_calls, :list, default: []
   attr :input_tokens, :integer, default: nil
   attr :output_tokens, :integer, default: nil
   attr :tokens_per_second, :float, default: nil
+  attr :interrupted, :boolean, default: false
 
   def assistant_message(assigns) do
     assigns =
@@ -31,6 +56,7 @@ defmodule ElixirAiWeb.AssistantMessage do
       input_tokens={@input_tokens}
       output_tokens={@output_tokens}
       tokens_per_second={@tokens_per_second}
+      interrupted={@interrupted}
     />
     """
   end
@@ -108,6 +134,7 @@ defmodule ElixirAiWeb.AssistantMessage do
   attr :input_tokens, :integer, default: nil
   attr :output_tokens, :integer, default: nil
   attr :tokens_per_second, :float, default: nil
+  attr :interrupted, :boolean, default: false
 
   defp message_bubble(assigns) do
     ~H"""
@@ -162,6 +189,19 @@ defmodule ElixirAiWeb.AssistantMessage do
           data-md={@content}
           class={"w-fit px-3 py-2 rounded-lg #{max_width_class()} markdown bg-seafoam-950/50 overflow-x-auto"}
         >
+        </div>
+      <% end %>
+      <%= if @interrupted do %>
+        <div class="mt-1 ps-1 flex items-center gap-1 text-[10px] text-amber-600/70 select-none">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="w-3 h-3"
+          >
+            <path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z" />
+          </svg>
+          <span>stopped</span>
         </div>
       <% end %>
       <%= if @output_tokens do %>

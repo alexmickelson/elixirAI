@@ -120,7 +120,10 @@ defmodule ElixirAi.ChatRunner do
      }, {:continue, :load_from_db}}
   end
 
-  def handle_continue(:load_from_db, state), do: Recovery.load_and_resume(state)
+  def handle_continue(:load_from_db, state) do
+    result = Recovery.load_and_resume(state)
+    with_status_broadcast(state, result)
+  end
 
   def handle_cast({:conversation, {:user_message, _, _} = inner}, state) do
     state =
@@ -131,10 +134,12 @@ defmodule ElixirAi.ChatRunner do
         state
       end
 
-    ConversationCalls.handle_cast(inner, state)
+    with_status_broadcast(state, ConversationCalls.handle_cast(inner, state))
   end
 
-  def handle_cast({:conversation, inner}, state), do: ConversationCalls.handle_cast(inner, state)
+  def handle_cast({:conversation, inner}, state) do
+    with_status_broadcast(state, ConversationCalls.handle_cast(inner, state))
+  end
 
   def handle_cast(:stop_conversation, state) do
     if state.ai_task_pid && Process.alive?(state.ai_task_pid) do
@@ -145,8 +150,32 @@ defmodule ElixirAi.ChatRunner do
       send(pid, {:approval_response, ref, :denied})
     end)
 
+    # Commit any in-progress streaming response so it isn't lost
+    {new_messages, stop_broadcast} =
+      case state.streaming_response do
+        nil ->
+          {state.messages, :stopped}
+
+        resp
+        when resp.content != "" or resp.reasoning_content != "" or resp.tool_calls != [] ->
+          partial_message = %{
+            role: :assistant,
+            content: resp.content,
+            reasoning_content: resp.reasoning_content,
+            tool_calls: Enum.map(resp.tool_calls, &Map.delete(&1, :index)),
+            interrupted: true
+          }
+
+          store_message(state.conversation_id, state.name, partial_message)
+          {state.messages ++ [partial_message], {:stopped, partial_message}}
+
+        _ ->
+          {state.messages, :stopped}
+      end
+
     Conversation.set_stopped(state.name, true)
-    broadcast_ui(state.name, :stopped)
+    broadcast_ui(state.name, stop_broadcast)
+    broadcast_admin_status(state.name, :stopped)
 
     {:noreply,
      %{
@@ -155,6 +184,7 @@ defmodule ElixirAi.ChatRunner do
          streaming_response: nil,
          pending_tool_calls: [],
          pending_approvals: %{},
+         messages: new_messages,
          stopped: true,
          current_status: :stopped
      }}
@@ -168,6 +198,7 @@ defmodule ElixirAi.ChatRunner do
       {pid, new_approvals} ->
         send(pid, {:approval_response, ref, decision})
         new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
+        broadcast_admin_status(state.name, new_status)
         {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
     end
   end
@@ -188,11 +219,21 @@ defmodule ElixirAi.ChatRunner do
     {:noreply, state}
   end
 
-  def handle_info({:stream, inner}, state), do: StreamHandler.handle(inner, state)
-  def handle_info({:error, inner}, state), do: ErrorHandler.handle(inner, state)
-  def handle_info({:finalize_response, _id} = msg, state), do: StreamHandler.handle(msg, state)
+  def handle_info({:stream, inner}, state) do
+    with_status_broadcast(state, StreamHandler.handle(inner, state))
+  end
+
+  def handle_info({:error, inner}, state) do
+    with_status_broadcast(state, ErrorHandler.handle(inner, state))
+  end
+
+  def handle_info({:finalize_response, _id} = msg, state) do
+    with_status_broadcast(state, StreamHandler.handle(msg, state))
+  end
 
   def handle_info({:register_pending_approval, ref, pid, command, reason}, state) do
+    broadcast_admin_status(state.name, :pending_approval)
+
     {:noreply,
      %{
        state
@@ -213,4 +254,19 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_call({:tool_config, inner}, from, state),
     do: ToolConfig.handle_call(inner, from, state)
+
+  defp with_status_broadcast(
+         %{current_status: old, name: name},
+         {:noreply, %{current_status: new} = new_state}
+       )
+       when old != new do
+    broadcast_admin_status(name, new)
+    {:noreply, new_state}
+  end
+
+  defp with_status_broadcast(_old_state, result), do: result
+
+  defp broadcast_admin_status(name, status) do
+    Phoenix.PubSub.broadcast(ElixirAi.PubSub, admin_topic(), {:runner_status, name, status})
+  end
 end
