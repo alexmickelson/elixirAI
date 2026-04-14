@@ -1,5 +1,7 @@
 defmodule ElixirAi.ChatRunner.OutboundHelpers do
   import ElixirAi.PubsubTopics
+  alias ElixirAi.Message
+  require Logger
 
   def broadcast_ui(name, msg),
     do:
@@ -9,19 +11,28 @@ defmodule ElixirAi.ChatRunner.OutboundHelpers do
         {:conversation_stream_message, msg}
       )
 
-  def store_message(name, messages) when is_list(messages) do
-    Enum.each(messages, &store_message(name, &1))
-    messages
+  def store_message(conversation_id, name, messages) when is_list(messages) do
+    Enum.each(messages, &store_message(conversation_id, name, &1))
   end
 
-  def store_message(name, message) do
-    Phoenix.PubSub.broadcast(
-      ElixirAi.PubSub,
-      conversation_message_topic(name),
-      {:error, {:store_message, name, message}}
+  def store_message(nil, name, _message) do
+    Logger.error(
+      "store_message called with nil conversation_id for #{name} — message will not be persisted"
     )
+  end
 
-    message
+  def store_message(conversation_id, name, message) do
+    topic = conversation_message_topic(name)
+
+    Task.start(fn ->
+      case Message.insert(conversation_id, message, topic: topic) do
+        {:error, reason} ->
+          Logger.error("Failed to persist message for #{name}: #{inspect(reason)}")
+
+        _ ->
+          :ok
+      end
+    end)
   end
 
   def messages_with_system_prompt(messages, nil), do: messages

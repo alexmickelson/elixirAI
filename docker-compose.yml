@@ -107,6 +107,8 @@ services:
       dockerfile: Dockerfile
     container_name: command_runner
     hostname: command_runner
+    volumes:
+      - sandbox_home:/home/sandbox
     healthcheck:
       test: ["CMD", "echo", "ok"]
       interval: 10s
@@ -122,3 +124,6 @@ services:
     depends_on:
       - node1
       - node2
+
+volumes:
+  sandbox_home:

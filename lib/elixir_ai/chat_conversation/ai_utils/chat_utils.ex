@@ -93,6 +93,7 @@ defmodule ElixirAi.ChatUtils do
       case Req.post(api_url,
              json: body,
              headers: headers,
+             receive_timeout: 20_000, # initial warmup of loading model to ram can take a while
              into: fn {:data, data}, acc ->
                data
                |> String.split("\n")

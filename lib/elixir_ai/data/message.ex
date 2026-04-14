@@ -84,32 +84,45 @@ defmodule ElixirAi.Message do
 
       ordered = sort_by_prev_message(tagged, by_key)
 
-      Enum.map(ordered, fn row ->
+      # Group tool call rows by their parent text_message_id, preserving chain
+      # order so they reconstruct into the same shape as the streaming path
+      # (one assistant message with reasoning_content + tool_calls together).
+      tool_calls_by_text_msg_id =
+        ordered
+        |> Enum.filter(&(&1._table == "tool_calls_request_messages"))
+        |> Enum.group_by(& &1.text_message_id)
+        |> Map.new(fn {id, rows} ->
+          {id,
+           Enum.map(rows, fn row ->
+             %{
+               id: row.tool_call_id,
+               name: row.tool_name,
+               arguments: row.arguments,
+               approval_decision: row.approval_decision,
+               approval_justification: row.approval_justification
+             }
+           end)}
+        end)
+
+      ordered
+      |> Enum.map(fn row ->
         case row._table do
           "text_messages" ->
+            attached_tool_calls = Map.get(tool_calls_by_text_msg_id, row.id, [])
+
             %MessageSchema{
               role: String.to_existing_atom(row.role),
               content: row[:content],
               reasoning_content: row[:reasoning_content],
-              tool_calls: [],
+              tool_calls: attached_tool_calls,
               input_tokens: row[:input_tokens],
               output_tokens: row[:output_tokens],
               tokens_per_second: row[:tokens_per_second]
             }
 
           "tool_calls_request_messages" ->
-            %MessageSchema{
-              role: :assistant,
-              tool_calls: [
-                %{
-                  id: row.tool_call_id,
-                  name: row.tool_name,
-                  arguments: row.arguments,
-                  approval_decision: row.approval_decision,
-                  approval_justification: row.approval_justification
-                }
-              ]
-            }
+            # Already merged into the parent text_messages entry above.
+            nil
 
           "tool_response_messages" ->
             %MessageSchema{
@@ -119,6 +132,7 @@ defmodule ElixirAi.Message do
             }
         end
       end)
+      |> Enum.reject(&is_nil/1)
       |> Enum.map(&drop_nil_fields(Map.from_struct(&1)))
       |> Enum.map(&struct(MessageSchema, &1))
     else

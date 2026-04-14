@@ -32,6 +32,8 @@ defmodule ElixirAi.CommandApproval do
     changes, git commits/pushes/resets, and anything that modifies persistent state.
 
     When in doubt, require approval.
+
+    justifications should be a short sentence.
     """
   }
 

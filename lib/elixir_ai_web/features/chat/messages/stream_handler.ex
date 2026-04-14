@@ -12,7 +12,9 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
     }
 
     broadcast_ui(state.name, {:start_ai_response_stream, starting_response})
-    {:noreply, %{state | streaming_response: starting_response}}
+
+    {:noreply,
+     %{state | streaming_response: starting_response, current_status: :generating_ai_response}}
   end
 
   def handle({:ai_reasoning_chunk, _id, reasoning_content}, state) do
@@ -74,12 +76,13 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       }
 
       broadcast_ui(state.name, {:end_ai_response, final_message})
-      store_message(state.name, final_message)
+      store_message(state.conversation_id, state.name, final_message)
 
       {:noreply,
        %{
          state
          | streaming_response: nil,
+           current_status: :idle,
            messages: state.messages ++ [final_message]
        }}
     else
@@ -159,13 +162,18 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
         end
       end)
 
-    store_message(state.name, [tool_request_message] ++ failed_call_messages)
+    store_message(
+      state.conversation_id,
+      state.name,
+      [tool_request_message] ++ failed_call_messages
+    )
 
     {:noreply,
      %{
        state
        | messages: state.messages ++ [tool_request_message] ++ failed_call_messages,
-         pending_tool_calls: pending_call_ids
+         pending_tool_calls: pending_call_ids,
+         current_status: :awaiting_tools
      }}
   end
 
@@ -173,7 +181,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
     new_message = %{role: :tool, content: inspect(result), tool_call_id: tool_call_id}
 
     broadcast_ui(state.name, {:one_tool_finished, new_message})
-    store_message(state.name, new_message)
+    store_message(state.conversation_id, state.name, new_message)
 
     new_pending_tool_calls =
       Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
@@ -202,6 +210,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
        state
        | pending_tool_calls: new_pending_tool_calls,
          streaming_response: new_streaming_response,
+         current_status:
+           if(new_pending_tool_calls == [], do: :generating_ai_response, else: :awaiting_tools),
          messages: state.messages ++ [new_message]
      }}
   end
@@ -209,7 +219,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   def handle({:ai_request_error, reason}, state) do
     Logger.error("AI request error: #{inspect(reason)}")
     broadcast_ui(state.name, {:ai_request_error, reason})
-    {:noreply, %{state | streaming_response: nil, pending_tool_calls: []}}
+    {:noreply, %{state | streaming_response: nil, pending_tool_calls: [], current_status: :error}}
   end
 
   # Fallback fired ~1.5 s after finish_reason: stop for providers that never
@@ -232,12 +242,13 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       }
 
       broadcast_ui(state.name, {:end_ai_response, final_message})
-      store_message(state.name, final_message)
+      store_message(state.conversation_id, state.name, final_message)
 
       {:noreply,
        %{
          state
          | streaming_response: nil,
+           current_status: :idle,
            messages: state.messages ++ [final_message]
        }}
     else

@@ -8,10 +8,6 @@ defmodule ElixirAiWeb.ToolMessages do
   @tool_output_tuple_pattern ~r/^\{:([a-z][a-z0-9_]*),\s*"(.*)"\}$/s
   @string_unescape_pattern ~r/\\(n|t|r|\\|")/
 
-  # ---------------------------------------------------------------------------
-  # Public component
-  # ---------------------------------------------------------------------------
-
   attr :tool_call, :map, required: true
   attr :result, :map, default: nil
 
@@ -41,6 +37,7 @@ defmodule ElixirAiWeb.ToolMessages do
       |> assign(:_arguments, tool_call[:arguments])
       |> assign(:_approval_decision, tool_call[:approval_decision])
       |> assign(:_approval_justification, tool_call[:approval_justification])
+      |> assign(:_reasoning_content, tool_call[:reasoning_content])
       |> assign(:_result_content, result_content)
       |> assign(:_is_cmd, is_cmd)
       |> assign(:_cmd_atom, cmd_atom)
@@ -124,6 +121,7 @@ defmodule ElixirAiWeb.ToolMessages do
           arguments={@_arguments}
           approval_decision={@_approval_decision}
           approval_justification={@_approval_justification}
+          reasoning_content={@_reasoning_content}
           result_content={@_result_content}
           is_cmd={@_is_cmd}
           cmd_atom={@_cmd_atom}
@@ -140,6 +138,7 @@ defmodule ElixirAiWeb.ToolMessages do
   attr :arguments, :any, default: nil
   attr :approval_decision, :string, default: nil
   attr :approval_justification, :string, default: nil
+  attr :reasoning_content, :string, default: nil
   attr :result_content, :string, default: nil
   attr :is_cmd, :boolean, default: false
   attr :cmd_atom, :string, default: nil
@@ -149,12 +148,20 @@ defmodule ElixirAiWeb.ToolMessages do
 
   defp tool_message_body(assigns) do
     ~H"""
+    <%= if @reasoning_content && @reasoning_content != "" do %>
+      <div class="px-3 py-2 border-b border-seafoam-900/40">
+        <div class="text-seafoam-600 mb-1 uppercase tracking-wider text-[10px]">reasoning</div>
+        <pre class="text-seafoam-400/70 whitespace-pre-wrap break-all text-[11px] leading-relaxed">{@reasoning_content}</pre>
+      </div>
+    <% end %>
     <.tool_call_args_section name={@name} arguments={@arguments} />
     <%= if @approval_decision do %>
       <div class="px-3 py-2 border-t border-seafoam-900/40">
         <div class="text-seafoam-600 mb-1 uppercase tracking-wider text-[10px]">reason</div>
         <p class="text-seafoam-400/80 whitespace-pre-wrap break-all">
-          {if @approval_justification && @approval_justification != "", do: @approval_justification, else: "—"}
+          {if @approval_justification && @approval_justification != "",
+            do: @approval_justification,
+            else: "—"}
         </p>
       </div>
     <% end %>
@@ -205,8 +212,17 @@ defmodule ElixirAiWeb.ToolMessages do
       {results, remaining} = take_tool_results(rest, call_id_map, [])
       results_by_id = Map.new(results, fn r -> {r.tool_call_id, r} end)
 
+      reasoning = Map.get(msg, :reasoning_content)
+
       exchanges =
-        Enum.map(tool_calls, fn tc -> {:tool_exchange, tc, Map.get(results_by_id, tc.id)} end)
+        Enum.map(tool_calls, fn tc ->
+          tc =
+            if reasoning && reasoning != "",
+              do: Map.put(tc, :reasoning_content, reasoning),
+              else: tc
+
+          {:tool_exchange, tc, Map.get(results_by_id, tc.id)}
+        end)
 
       text_items =
         if msg.content && msg.content != "",

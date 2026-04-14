@@ -5,6 +5,10 @@ defmodule ElixirAi.ChatRunner.LiveviewSession do
     {:reply, Map.keys(state.liveview_pids), state}
   end
 
+  def handle_call(:get_status, _from, state) do
+    {:reply, state.current_status, state}
+  end
+
   def handle_call(:get_pending_approvals, _from, state) do
     {:reply, ElixirAi.ChatRunner.ApprovalTracker.list(state.pending_approvals), state}
   end

@@ -65,7 +65,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
-         |> assign(ai_error: nil)}
+         |> assign(ai_error: nil)
+         |> assign(runner_status: nil)}
 
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
@@ -85,14 +86,15 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
-         |> assign(ai_error: nil)}
+         |> assign(ai_error: nil)
+         |> assign(runner_status: nil)}
     end
   end
 
   @impl Phoenix.LiveView
   def render(assigns) do
     ~H"""
-    <div class="flex flex-col h-full  rounded-lg">
+    <div class="flex flex-col h-full rounded-lg relative">
       <div class="px-4 py-3 font-semibold flex items-center gap-3">
         <.link navigate={~p"/"} class="text-seafoam-700 hover:text-seafoam-400 transition-colors">
           ←
@@ -179,6 +181,7 @@ defmodule ElixirAiWeb.ChatLive do
           <.spinner />
         <% end %>
       </div>
+      <.runner_status_indicator status={@runner_status} />
       <form class="p-3 flex gap-2 items-center" phx-submit="submit" phx-change="update_user_input">
         <input
           type="text"
@@ -220,15 +223,25 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_event("approve_command", %{"ref" => ref_string}, socket) do
     ref = decode_ref(ref_string)
     ChatRunner.approval_decision(socket.assigns.conversation_name, ref, :approved)
+    remaining = Enum.reject(socket.assigns.pending_approvals, fn a -> a.ref == ref end)
+    status = if remaining == [], do: :awaiting_tools, else: :pending_approval
 
-    {:noreply, update(socket, :pending_approvals, &Enum.reject(&1, fn a -> a.ref == ref end))}
+    {:noreply,
+     socket
+     |> assign(pending_approvals: remaining)
+     |> assign(runner_status: status)}
   end
 
   def handle_event("deny_command", %{"ref" => ref_string}, socket) do
     ref = decode_ref(ref_string)
     ChatRunner.approval_decision(socket.assigns.conversation_name, ref, :denied)
+    remaining = Enum.reject(socket.assigns.pending_approvals, fn a -> a.ref == ref end)
+    status = if remaining == [], do: :awaiting_tools, else: :pending_approval
 
-    {:noreply, update(socket, :pending_approvals, &Enum.reject(&1, fn a -> a.ref == ref end))}
+    {:noreply,
+     socket
+     |> assign(pending_approvals: remaining)
+     |> assign(runner_status: status)}
   end
 
   def handle_info(
@@ -244,6 +257,8 @@ defmodule ElixirAiWeb.ChatLive do
       |> assign(streaming_response: conversation.streaming_response)
       |> assign(provider: conversation.provider)
       |> assign(pending_approvals: pending_approvals)
+      |> assign(runner_status: conversation.current_status)
+      |> push_event("scroll_to_bottom", %{})
 
     # Now sync streaming state if there's an active stream
     if conversation.streaming_response do
@@ -254,7 +269,10 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:conversation_stream_message, msg}, socket) do
-    ConversationStreamHandler.handle(msg, socket)
+    {:noreply, updated} = ConversationStreamHandler.handle(msg, socket)
+
+    {:noreply,
+     assign(updated, runner_status: derive_runner_status(msg, socket.assigns.runner_status))}
   end
 
   def handle_info(:sync_streaming, %{assigns: %{runner_pid: pid}} = socket)
@@ -305,7 +323,8 @@ defmodule ElixirAiWeb.ChatLive do
 
     {:noreply,
      socket
-     |> update(:pending_approvals, &[approval | &1])}
+     |> update(:pending_approvals, &[approval | &1])
+     |> assign(runner_status: :pending_approval)}
   end
 
   @impl Phoenix.LiveView
@@ -320,4 +339,107 @@ defmodule ElixirAiWeb.ChatLive do
   defp encode_ref(ref), do: ref |> :erlang.term_to_binary() |> Base.url_encode64()
 
   defp decode_ref(string), do: string |> Base.url_decode64!() |> :erlang.binary_to_term([:safe])
+
+  defp derive_runner_status(msg, current) do
+    case msg do
+      {:user_chat_message, _} -> :generating_ai_response
+      {:start_ai_response_stream, _} -> :generating_ai_response
+      {:end_ai_response, _} -> :idle
+      {:tool_request_message, _} -> :awaiting_tools
+      :tool_calls_finished -> :generating_ai_response
+      {:ai_request_error, _} -> :error
+      :recovery_restart -> :generating_ai_response
+      _ -> current
+    end
+  end
+
+  attr :status, :atom, default: nil
+
+  defp runner_status_indicator(assigns) do
+    ~H"""
+    <%= if @status not in [nil, :idle] do %>
+      <div class="absolute bottom-14 right-3 pointer-events-none select-none z-10">
+        <div class={[
+          "flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] backdrop-blur-sm border",
+          runner_status_classes(@status)
+        ]}>
+          <%= case @status do %>
+            <% s when s in [:initial_startup, :generating_ai_response] -> %>
+              <svg class="w-3 h-3 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="3"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+            <% :awaiting_tools -> %>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-3 h-3 shrink-0 animate-pulse"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            <% :pending_approval -> %>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-3 h-3 shrink-0"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+            <% :error -> %>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                class="w-3 h-3 shrink-0"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+          <% end %>
+          <span class="font-medium">{runner_status_label(@status)}</span>
+        </div>
+      </div>
+    <% end %>
+    """
+  end
+
+  defp runner_status_classes(:pending_approval),
+    do: "bg-amber-950/70 border-amber-800/40 text-amber-400"
+
+  defp runner_status_classes(:error),
+    do: "bg-red-950/70 border-red-800/40 text-red-400"
+
+  defp runner_status_classes(_),
+    do: "bg-seafoam-950/70 border-seafoam-800/40 text-seafoam-400"
+
+  defp runner_status_label(:initial_startup), do: "starting up"
+  defp runner_status_label(:generating_ai_response), do: "thinking"
+  defp runner_status_label(:awaiting_tools), do: "running tools"
+  defp runner_status_label(:pending_approval), do: "awaiting approval"
+  defp runner_status_label(:error), do: "error"
+  defp runner_status_label(_), do: ""
 end

@@ -12,8 +12,4 @@ defmodule ElixirAi.ChatRunner.ErrorHandler do
     broadcast_ui(state.name, {:db_error, "Schema validation error: #{inspect(error)}"})
     {:noreply, state}
   end
-
-  def handle({:store_message, _name, _message}, state) do
-    {:noreply, state}
-  end
 end

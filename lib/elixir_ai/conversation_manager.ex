@@ -1,6 +1,6 @@
 defmodule ElixirAi.ConversationManager do
   use GenServer
-  alias ElixirAi.{Conversation, Message, AiTools}
+  alias ElixirAi.{Conversation, AiTools}
   import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1]
   require Logger
 
@@ -163,22 +163,6 @@ defmodule ElixirAi.ConversationManager do
   def handle_info({:error, {:sql_result_validation_error, error}}, state) do
     Logger.error("ConversationManager received sql_result_validation_error: #{inspect(error)}")
     {:noreply, state}
-  end
-
-  def handle_info(
-        {:error, {:store_message, name, message}},
-        %{conversations: conversations} = state
-      ) do
-    case Conversation.find_id(name) do
-      {:ok, conv_id} ->
-        Message.insert(conv_id, message, topic: conversation_message_topic(name))
-
-      _ ->
-        :ok
-    end
-
-    {:noreply,
-     %{state | conversations: Map.update(conversations, name, [message], &(&1 ++ [message]))}}
   end
 
   def handle_info(:load_conversations, state) do

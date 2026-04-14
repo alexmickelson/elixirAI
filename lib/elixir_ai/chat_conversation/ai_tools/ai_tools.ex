@@ -45,6 +45,57 @@ defmodule ElixirAi.AiTools do
     build_server_tools(server, allowed_names) ++ build_liveview_tools(server, allowed_names)
   end
 
+  def recover_run_tool_call(server, tool_call_id, command) do
+    Task.start_link(fn ->
+      try do
+        name = :sys.get_state(server).name
+        topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
+
+        result =
+          case ElixirAi.CommandApproval.classify(command) do
+            {:auto_allow, justification} ->
+              ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
+                justification: justification,
+                topic: topic
+              )
+
+              Phoenix.PubSub.broadcast(
+                ElixirAi.PubSub,
+                chat_topic(name),
+                {:conversation_stream_message,
+                 {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
+              )
+
+              execute_command(command)
+
+            {:needs_approval, justification} ->
+              {decision, cmd_result} = request_approval(server, command, justification)
+
+              ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
+                justification: justification,
+                topic: topic
+              )
+
+              Phoenix.PubSub.broadcast(
+                ElixirAi.PubSub,
+                chat_topic(name),
+                {:conversation_stream_message,
+                 {:tool_approval_updated, tool_call_id, Atom.to_string(decision), justification}}
+              )
+
+              cmd_result
+          end
+
+        send(server, {:stream, {:tool_response, nil, tool_call_id, result}})
+      rescue
+        e ->
+          reason = Exception.format(:error, e, __STACKTRACE__)
+          Logger.error("Recovery tool task crashed for #{tool_call_id}: #{reason}")
+          send(server, {:stream, {:tool_response, nil, tool_call_id, {:error, reason}}})
+      end
+    end)
+  end
+
   # ---------------------------------------------------------------------------
   # Server tools
   # ---------------------------------------------------------------------------

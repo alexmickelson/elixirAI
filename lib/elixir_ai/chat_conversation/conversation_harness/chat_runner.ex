@@ -68,6 +68,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.call(via(name), {:conversation, :get_conversation})
   end
 
+  def get_status(name) do
+    GenServer.call(via(name), {:session, :get_status})
+  end
+
   def get_streaming_response(name) do
     GenServer.call(via(name), {:conversation, :get_streaming_response})
   end
@@ -91,6 +95,7 @@ defmodule ElixirAi.ChatRunner do
     {:ok,
      %{
        name: name,
+       conversation_id: nil,
        messages: [],
        system_prompt: nil,
        streaming_response: nil,
@@ -104,21 +109,22 @@ defmodule ElixirAi.ChatRunner do
        provider: nil,
        response_format: nil,
        liveview_pids: %{},
-       loading: true
+       current_status: :initial_startup
      }, {:continue, :load_from_db}}
   end
 
   def handle_continue(:load_from_db, %{name: name} = state) do
     # Run all DB lookups concurrently — these are independent queries
     tasks = %{
-      messages:
+      messages_and_id:
         Task.async(fn ->
           case Conversation.find_id(name) do
             {:ok, conv_id} ->
-              Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))
+              {conv_id,
+               Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))}
 
             _ ->
-              []
+              {nil, []}
           end
         end),
       provider: Task.async(fn -> Conversation.find_provider(name) end),
@@ -127,7 +133,7 @@ defmodule ElixirAi.ChatRunner do
       category: Task.async(fn -> Conversation.find_category(name) end)
     }
 
-    messages = Task.await(tasks.messages, 10_000)
+    {conversation_id, messages} = Task.await(tasks.messages_and_id, 10_000)
     last_message = List.last(messages)
 
     provider =
@@ -157,7 +163,50 @@ defmodule ElixirAi.ChatRunner do
     server_tools = AiTools.build_server_tools(self(), allowed_tools)
     liveview_tools = AiTools.build_liveview_tools(self(), allowed_tools)
 
-    if last_message && last_message.role == :user do
+    # Find "run" tool calls that had no approval decision and no tool response — these
+    # were waiting for user approval when the server previously crashed.
+    responded_tool_call_ids =
+      messages
+      |> Enum.filter(&(&1.role == :tool))
+      |> Enum.map(& &1.tool_call_id)
+      |> MapSet.new()
+
+    pending_run_calls =
+      messages
+      |> Enum.flat_map(fn
+        %{role: :assistant, tool_calls: tool_calls} when is_list(tool_calls) ->
+          Enum.filter(tool_calls, fn tc ->
+            tc.name == "run" and
+              Map.get(tc, :approval_decision) == nil and
+              not MapSet.member?(responded_tool_call_ids, tc.id)
+          end)
+
+        _ ->
+          []
+      end)
+
+    unless pending_run_calls == [] do
+      Logger.info(
+        "Recovering #{length(pending_run_calls)} pending approval(s) for conversation #{name}"
+      )
+    end
+
+    Enum.each(pending_run_calls, fn tc ->
+      args =
+        case tc.arguments do
+          a when is_map(a) -> a
+          a when is_binary(a) -> Jason.decode!(a)
+        end
+
+      command = args["command"] || args[:command]
+      AiTools.recover_run_tool_call(self(), tc.id, command)
+    end)
+
+    recovered_tool_call_ids = Enum.map(pending_run_calls, & &1.id)
+
+    restart_roles = [:user, :tool]
+
+    if last_message && last_message.role in restart_roles do
       Logger.info(
         "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
       )
@@ -174,17 +223,31 @@ defmodule ElixirAi.ChatRunner do
       )
     end
 
+    recovered_status =
+      cond do
+        last_message && last_message.role in restart_roles ->
+          :generating_ai_response
+
+        pending_run_calls != [] ->
+          :pending_approval
+
+        true ->
+          :idle
+      end
+
     {:noreply,
      %{
        state
-       | messages: messages,
+       | conversation_id: conversation_id,
+         messages: messages,
          system_prompt: system_prompt,
          allowed_tools: allowed_tools,
          tool_choice: tool_choice,
          server_tools: server_tools,
          liveview_tools: liveview_tools,
          provider: provider,
-         loading: false
+         pending_tool_calls: recovered_tool_call_ids,
+         current_status: recovered_status
      }}
   end
 
@@ -197,7 +260,8 @@ defmodule ElixirAi.ChatRunner do
 
       {pid, new_approvals} ->
         send(pid, {:approval_response, ref, decision})
-        {:noreply, %{state | pending_approvals: new_approvals}}
+        new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
+        {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
     end
   end
 
@@ -222,7 +286,8 @@ defmodule ElixirAi.ChatRunner do
     {:noreply,
      %{
        state
-       | pending_approvals:
+       | current_status: :pending_approval,
+         pending_approvals:
            ApprovalTracker.register(state.pending_approvals, ref, pid, command, reason)
      }}
   end
