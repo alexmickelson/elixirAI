@@ -73,30 +73,42 @@ Hooks.MarkdownStream = {
 
 Hooks.ScrollBottom = {
   mounted() {
-    requestAnimationFrame(() => this.scrollToBottom());
+    this.userScrolledUp = false;
+    this.programmaticScroll = false;
+
+    this.el.addEventListener("scroll", () => {
+      if (this.programmaticScroll) return;
+      this.userScrolledUp = !this.isNearBottom();
+    });
+
     this.observer = new MutationObserver(() => {
-      if (this.isNearBottom()) this.scrollToBottom();
+      if (!this.userScrolledUp) this.scrollToBottom();
     });
     this.observer.observe(this.el, { childList: true, subtree: true });
+
     this.handleEvent("scroll_to_bottom", () => {
-      requestAnimationFrame(() => this.scrollToBottom());
+      requestAnimationFrame(() => {
+        if (!this.userScrolledUp) this.scrollToBottom();
+      });
     });
+
+    requestAnimationFrame(() => this.scrollToBottom());
   },
   updated() {
-    if (this.isNearBottom()) this.scrollToBottom();
+    if (!this.userScrolledUp) this.scrollToBottom();
   },
   destroyed() {
     this.observer.disconnect();
   },
   isNearBottom() {
-    const closeToBottomThreshold = 200;
-    return (
-      this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight <=
-      closeToBottomThreshold
-    );
+    return this.el.scrollTop <= 100;
   },
   scrollToBottom() {
-    this.el.scrollTop = this.el.scrollHeight;
+    this.programmaticScroll = true;
+    this.el.scrollTop = 0;
+    requestAnimationFrame(() => {
+      this.programmaticScroll = false;
+    });
   },
 };
 

@@ -218,6 +218,32 @@ defmodule ElixirAi.Conversation do
     end
   end
 
+  def find_stopped(name) do
+    sql = "SELECT stopped FROM conversations WHERE name = $(name) LIMIT 1"
+    params = %{"name" => name}
+
+    case DbHelpers.run_sql(sql, params, "conversations") do
+      {:error, :db_error} -> {:error, :db_error}
+      [] -> {:error, :not_found}
+      [row | _] -> {:ok, row["stopped"] == true}
+    end
+  end
+
+  def set_stopped(name, stopped) when is_boolean(stopped) do
+    sql = """
+    UPDATE conversations
+    SET stopped = $(stopped), updated_at = NOW()
+    WHERE name = $(name)
+    """
+
+    params = %{"name" => name, "stopped" => stopped}
+
+    case DbHelpers.run_sql(sql, params, "conversations") do
+      {:error, :db_error} -> {:error, :db_error}
+      _ -> :ok
+    end
+  end
+
   def find_provider(name) do
     sql = """
     SELECT p.name, p.model_name, p.api_token, p.completions_url

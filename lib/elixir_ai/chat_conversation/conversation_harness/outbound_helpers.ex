@@ -24,15 +24,14 @@ defmodule ElixirAi.ChatRunner.OutboundHelpers do
   def store_message(conversation_id, name, message) do
     topic = conversation_message_topic(name)
 
-    Task.start(fn ->
-      case Message.insert(conversation_id, message, topic: topic) do
-        {:error, reason} ->
-          Logger.error("Failed to persist message for #{name}: #{inspect(reason)}")
+    case Message.insert(conversation_id, message, topic: topic) do
+      {:error, reason} ->
+        Logger.error("Failed to persist message for #{name}: #{inspect(reason)}")
+        {:error, reason}
 
-        _ ->
-          :ok
-      end
-    end)
+      result ->
+        result
+    end
   end
 
   def messages_with_system_prompt(messages, nil), do: messages

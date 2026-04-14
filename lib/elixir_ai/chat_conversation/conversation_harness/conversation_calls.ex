@@ -13,16 +13,17 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
         current_status: :generating_ai_response
     }
 
-    ElixirAi.ChatUtils.request_ai_response(
-      self(),
-      messages_with_system_prompt(new_state.messages, state.system_prompt),
-      state.server_tools ++ state.liveview_tools ++ state.page_tools,
-      state.provider,
-      effective_tool_choice,
-      state.response_format
-    )
+    {:ok, task_pid} =
+      ElixirAi.ChatUtils.request_ai_response(
+        self(),
+        messages_with_system_prompt(new_state.messages, state.system_prompt),
+        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        state.provider,
+        effective_tool_choice,
+        state.response_format
+      )
 
-    {:noreply, new_state}
+    {:noreply, %{new_state | ai_task_pid: task_pid}}
   end
 
   def handle_call(:get_conversation, _from, state) do

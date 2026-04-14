@@ -59,54 +59,62 @@ defmodule ElixirAi.ChatUtils do
         tool_choice \\ "auto",
         response_format \\ nil
       ) do
-    Task.start_link(fn ->
-      api_url = provider.completions_url
-      api_key = provider.api_token
-      model = provider.model_name
+    Task.start(fn ->
+      try do
+        api_url = provider.completions_url
+        api_key = provider.api_token
+        model = provider.model_name
 
-      if is_nil(api_url) or api_url == "" do
-        Logger.warning("AI endpoint is empty or nil")
-      end
+        if is_nil(api_url) or api_url == "" do
+          Logger.warning("AI endpoint is empty or nil")
+        end
 
-      if is_nil(api_key) or api_key == "" do
-        Logger.warning("AI token is empty or nil")
-      end
+        if is_nil(api_key) or api_key == "" do
+          Logger.warning("AI token is empty or nil")
+        end
 
-      if is_nil(model) or model == "" do
-        Logger.warning("AI model is empty or nil")
-      end
+        if is_nil(model) or model == "" do
+          Logger.warning("AI model is empty or nil")
+        end
 
-      body = %{
-        model: model,
-        stream: true,
-        stream_options: %{include_usage: true},
-        messages: messages |> Enum.map(&api_message/1),
-        tools: Enum.map(tools, & &1.definition),
-        tool_choice: tool_choice
-      }
+        body = %{
+          model: model,
+          stream: true,
+          stream_options: %{include_usage: true},
+          messages: messages |> Enum.map(&api_message/1),
+          tools: Enum.map(tools, & &1.definition),
+          tool_choice: tool_choice
+        }
 
-      body =
-        if response_format, do: Map.put(body, :response_format, response_format), else: body
+        body =
+          if response_format, do: Map.put(body, :response_format, response_format), else: body
 
-      headers = [{"authorization", "Bearer #{api_key}"}]
+        headers = [{"authorization", "Bearer #{api_key}"}]
 
-      case Req.post(api_url,
-             json: body,
-             headers: headers,
-             receive_timeout: 20_000, # initial warmup of loading model to ram can take a while
-             into: fn {:data, data}, acc ->
-               data
-               |> String.split("\n")
-               |> Enum.each(&handle_stream_line(server, &1))
+        case Req.post(api_url,
+               json: body,
+               headers: headers,
+               receive_timeout: 20_000,
+               # initial warmup of loading model to ram can take a while
+               into: fn {:data, data}, acc ->
+                 data
+                 |> String.split("\n")
+                 |> Enum.each(&handle_stream_line(server, &1))
 
-               {:cont, acc}
-             end
-           ) do
-        {:ok, _response} ->
-          :ok
+                 {:cont, acc}
+               end
+             ) do
+          {:ok, _response} ->
+            :ok
 
-        {:error, reason} ->
-          Logger.warning("AI request failed: #{inspect(reason)} for #{api_url}")
+          {:error, reason} ->
+            Logger.warning("AI request failed: #{inspect(reason)} for #{api_url}")
+            send(server, {:stream, {:ai_request_error, reason}})
+        end
+      rescue
+        e ->
+          reason = Exception.format(:error, e, __STACKTRACE__)
+          Logger.error("AI task crashed: #{reason}")
           send(server, {:stream, {:ai_request_error, reason}})
       end
     end)

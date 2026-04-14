@@ -1,7 +1,7 @@
 defmodule ElixirAi.ChatRunner do
   require Logger
   use GenServer
-  alias ElixirAi.{AiTools, Conversation, Message, SystemPrompts}
+  alias ElixirAi.{AiTools, Conversation}
   import ElixirAi.PubsubTopics
   import ElixirAi.ChatRunner.OutboundHelpers
 
@@ -10,6 +10,7 @@ defmodule ElixirAi.ChatRunner do
     ConversationCalls,
     ErrorHandler,
     LiveviewSession,
+    Recovery,
     StreamHandler,
     ToolConfig
   }
@@ -80,6 +81,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.cast(via(name), {:approval_decision, ref, decision})
   end
 
+  def stop_conversation(name) do
+    GenServer.cast(via(name), :stop_conversation)
+  end
+
   def get_pending_approvals(name) do
     GenServer.call(via(name), {:session, :get_pending_approvals})
   end
@@ -109,149 +114,51 @@ defmodule ElixirAi.ChatRunner do
        provider: nil,
        response_format: nil,
        liveview_pids: %{},
-       current_status: :initial_startup
+       current_status: :initial_startup,
+       ai_task_pid: nil,
+       stopped: false
      }, {:continue, :load_from_db}}
   end
 
-  def handle_continue(:load_from_db, %{name: name} = state) do
-    # Run all DB lookups concurrently — these are independent queries
-    tasks = %{
-      messages_and_id:
-        Task.async(fn ->
-          case Conversation.find_id(name) do
-            {:ok, conv_id} ->
-              {conv_id,
-               Message.load_for_conversation(conv_id, topic: conversation_message_topic(name))}
+  def handle_continue(:load_from_db, state), do: Recovery.load_and_resume(state)
 
-            _ ->
-              {nil, []}
-          end
-        end),
-      provider: Task.async(fn -> Conversation.find_provider(name) end),
-      allowed_tools: Task.async(fn -> Conversation.find_allowed_tools(name) end),
-      tool_choice: Task.async(fn -> Conversation.find_tool_choice(name) end),
-      category: Task.async(fn -> Conversation.find_category(name) end)
-    }
-
-    {conversation_id, messages} = Task.await(tasks.messages_and_id, 10_000)
-    last_message = List.last(messages)
-
-    provider =
-      case Task.await(tasks.provider, 5_000) do
-        {:ok, p} -> p
-        _ -> nil
+  def handle_cast({:conversation, {:user_message, _, _} = inner}, state) do
+    state =
+      if state.stopped do
+        Conversation.set_stopped(state.name, false)
+        %{state | stopped: false}
+      else
+        state
       end
 
-    allowed_tools =
-      case Task.await(tasks.allowed_tools, 5_000) do
-        {:ok, tools} -> tools
-        _ -> AiTools.all_tool_names()
-      end
+    ConversationCalls.handle_cast(inner, state)
+  end
 
-    tool_choice =
-      case Task.await(tasks.tool_choice, 5_000) do
-        {:ok, tc} -> tc
-        _ -> "auto"
-      end
+  def handle_cast({:conversation, inner}, state), do: ConversationCalls.handle_cast(inner, state)
 
-    system_prompt =
-      case Task.await(tasks.category, 5_000) do
-        {:ok, category} -> SystemPrompts.for_category(category)
-        _ -> nil
-      end
-
-    server_tools = AiTools.build_server_tools(self(), allowed_tools)
-    liveview_tools = AiTools.build_liveview_tools(self(), allowed_tools)
-
-    # Find "run" tool calls that had no approval decision and no tool response — these
-    # were waiting for user approval when the server previously crashed.
-    responded_tool_call_ids =
-      messages
-      |> Enum.filter(&(&1.role == :tool))
-      |> Enum.map(& &1.tool_call_id)
-      |> MapSet.new()
-
-    pending_run_calls =
-      messages
-      |> Enum.flat_map(fn
-        %{role: :assistant, tool_calls: tool_calls} when is_list(tool_calls) ->
-          Enum.filter(tool_calls, fn tc ->
-            tc.name == "run" and
-              Map.get(tc, :approval_decision) == nil and
-              not MapSet.member?(responded_tool_call_ids, tc.id)
-          end)
-
-        _ ->
-          []
-      end)
-
-    unless pending_run_calls == [] do
-      Logger.info(
-        "Recovering #{length(pending_run_calls)} pending approval(s) for conversation #{name}"
-      )
+  def handle_cast(:stop_conversation, state) do
+    if state.ai_task_pid && Process.alive?(state.ai_task_pid) do
+      Process.exit(state.ai_task_pid, :kill)
     end
 
-    Enum.each(pending_run_calls, fn tc ->
-      args =
-        case tc.arguments do
-          a when is_map(a) -> a
-          a when is_binary(a) -> Jason.decode!(a)
-        end
-
-      command = args["command"] || args[:command]
-      AiTools.recover_run_tool_call(self(), tc.id, command)
+    Enum.each(state.pending_approvals, fn {ref, %{pid: pid}} ->
+      send(pid, {:approval_response, ref, :denied})
     end)
 
-    recovered_tool_call_ids = Enum.map(pending_run_calls, & &1.id)
-
-    restart_roles = [:user, :tool]
-
-    if last_message && last_message.role in restart_roles do
-      Logger.info(
-        "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
-      )
-
-      broadcast_ui(name, :recovery_restart)
-
-      ElixirAi.ChatUtils.request_ai_response(
-        self(),
-        messages_with_system_prompt(messages, system_prompt),
-        server_tools ++ liveview_tools,
-        provider,
-        tool_choice,
-        state.response_format
-      )
-    end
-
-    recovered_status =
-      cond do
-        last_message && last_message.role in restart_roles ->
-          :generating_ai_response
-
-        pending_run_calls != [] ->
-          :pending_approval
-
-        true ->
-          :idle
-      end
+    Conversation.set_stopped(state.name, true)
+    broadcast_ui(state.name, :stopped)
 
     {:noreply,
      %{
        state
-       | conversation_id: conversation_id,
-         messages: messages,
-         system_prompt: system_prompt,
-         allowed_tools: allowed_tools,
-         tool_choice: tool_choice,
-         server_tools: server_tools,
-         liveview_tools: liveview_tools,
-         provider: provider,
-         pending_tool_calls: recovered_tool_call_ids,
-         current_status: recovered_status
+       | ai_task_pid: nil,
+         streaming_response: nil,
+         pending_tool_calls: [],
+         pending_approvals: %{},
+         stopped: true,
+         current_status: :stopped
      }}
   end
-
-  def handle_cast({:conversation, inner}, state), do: ConversationCalls.handle_cast(inner, state)
 
   def handle_cast({:approval_decision, ref, decision}, state) do
     case ApprovalTracker.resolve(state.pending_approvals, ref) do
@@ -264,6 +171,9 @@ defmodule ElixirAi.ChatRunner do
         {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
     end
   end
+
+  def handle_info({:stream, _inner}, %{stopped: true} = state), do: {:noreply, state}
+  def handle_info({:finalize_response, _}, %{stopped: true} = state), do: {:noreply, state}
 
   def handle_info(
         {:stream, msg},

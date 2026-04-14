@@ -115,71 +115,73 @@ defmodule ElixirAiWeb.ChatLive do
       <div
         id="chat-messages"
         phx-hook="ScrollBottom"
-        class={"flex-1 overflow-y-auto p-4 rounded-lg #{@background_color}"}
+        class={"flex-1 overflow-y-auto flex flex-col-reverse rounded-lg #{@background_color}"}
       >
-        <%= if @messages == [] do %>
-          <p class="text-sm text-center mt-4">No messages yet.</p>
-        <% end %>
-        <%= for item <- group_messages(@messages) do %>
-          <%= case item do %>
-            <% {:tool_exchange, tc, result} -> %>
-              <.tool_message tool_call={tc} result={result} />
-            <% {:plain, msg} -> %>
-              <%= cond do %>
-                <% msg.role == :user -> %>
-                  <.user_message content={Map.get(msg, :content) || ""} />
-                <% true -> %>
-                  <.assistant_message
-                    content={Map.get(msg, :content) || ""}
-                    reasoning_content={Map.get(msg, :reasoning_content)}
-                    tool_calls={Map.get(msg, :tool_calls) || []}
-                    input_tokens={Map.get(msg, :input_tokens)}
-                    output_tokens={Map.get(msg, :output_tokens)}
-                    tokens_per_second={Map.get(msg, :tokens_per_second)}
-                  />
-              <% end %>
+        <div class="flex flex-col p-4">
+          <%= if @messages == [] do %>
+            <p class="text-sm text-center mt-4">No messages yet.</p>
           <% end %>
-        <% end %>
-        <%= for approval <- @pending_approvals do %>
-          <div class="mb-2 rounded-lg border border-amber-800/40 bg-amber-950/30 px-4 py-3">
-            <p class="text-xs font-semibold uppercase tracking-wide text-amber-400">
-              Command requires approval
-            </p>
-            <div
-              id={"approval-reason-#{encode_ref(approval.ref)}"}
-              phx-hook="MarkdownRender"
-              phx-update="ignore"
-              data-md={approval.reason}
-              class="mt-0.5 text-xs text-amber-600/80 markdown"
-            >
-            </div>
-            <pre class="mt-2 overflow-x-auto rounded bg-black/30 px-3 py-2 text-xs font-mono text-amber-300/80"><%= approval.command %></pre>
-            <div class="mt-3 flex gap-2">
-              <button
-                phx-click="approve_command"
-                phx-value-ref={encode_ref(approval.ref)}
-                class="rounded border border-seafoam-700/50 px-3 py-1.5 text-xs text-seafoam-300 transition-colors hover:bg-seafoam-900/40"
+          <%= for item <- group_messages(@messages) do %>
+            <%= case item do %>
+              <% {:tool_exchange, tc, result} -> %>
+                <.tool_message tool_call={tc} result={result} />
+              <% {:plain, msg} -> %>
+                <%= cond do %>
+                  <% msg.role == :user -> %>
+                    <.user_message content={Map.get(msg, :content) || ""} />
+                  <% true -> %>
+                    <.assistant_message
+                      content={Map.get(msg, :content) || ""}
+                      reasoning_content={Map.get(msg, :reasoning_content)}
+                      tool_calls={Map.get(msg, :tool_calls) || []}
+                      input_tokens={Map.get(msg, :input_tokens)}
+                      output_tokens={Map.get(msg, :output_tokens)}
+                      tokens_per_second={Map.get(msg, :tokens_per_second)}
+                    />
+                <% end %>
+            <% end %>
+          <% end %>
+          <%= for approval <- @pending_approvals do %>
+            <div class="mb-2 rounded-lg border border-amber-800/40 bg-amber-950/30 px-4 py-3">
+              <p class="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                Command requires approval
+              </p>
+              <div
+                id={"approval-reason-#{encode_ref(approval.ref)}"}
+                phx-hook="MarkdownRender"
+                phx-update="ignore"
+                data-md={approval.reason}
+                class="mt-0.5 text-xs text-amber-600/80 markdown"
               >
-                Allow
-              </button>
-              <button
-                phx-click="deny_command"
-                phx-value-ref={encode_ref(approval.ref)}
-                class="rounded border border-red-800/50 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-950/40"
-              >
-                Deny
-              </button>
+              </div>
+              <pre class="mt-2 overflow-x-auto rounded bg-black/30 px-3 py-2 text-xs font-mono text-amber-300/80"><%= approval.command %></pre>
+              <div class="mt-3 flex gap-2">
+                <button
+                  phx-click="approve_command"
+                  phx-value-ref={encode_ref(approval.ref)}
+                  class="rounded border border-seafoam-700/50 px-3 py-1.5 text-xs text-seafoam-300 transition-colors hover:bg-seafoam-900/40"
+                >
+                  Allow
+                </button>
+                <button
+                  phx-click="deny_command"
+                  phx-value-ref={encode_ref(approval.ref)}
+                  class="rounded border border-red-800/50 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-950/40"
+                >
+                  Deny
+                </button>
+              </div>
             </div>
-          </div>
-        <% end %>
-        <%= if @streaming_response do %>
-          <.streaming_assistant_message
-            content={@streaming_response.content}
-            reasoning_content={@streaming_response.reasoning_content}
-            tool_calls={@streaming_response.tool_calls}
-          />
-          <.spinner />
-        <% end %>
+          <% end %>
+          <%= if @streaming_response do %>
+            <.streaming_assistant_message
+              content={@streaming_response.content}
+              reasoning_content={@streaming_response.reasoning_content}
+              tool_calls={@streaming_response.tool_calls}
+            />
+            <.spinner />
+          <% end %>
+        </div>
       </div>
       <.runner_status_indicator status={@runner_status} />
       <form class="p-3 flex gap-2 items-center" phx-submit="submit" phx-change="update_user_input">
@@ -324,7 +326,8 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply,
      socket
      |> update(:pending_approvals, &[approval | &1])
-     |> assign(runner_status: :pending_approval)}
+     |> assign(runner_status: :pending_approval)
+     |> push_event("scroll_to_bottom", %{})}
   end
 
   @impl Phoenix.LiveView

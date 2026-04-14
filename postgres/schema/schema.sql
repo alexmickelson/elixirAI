@@ -29,9 +29,12 @@ CREATE TABLE IF NOT EXISTS conversations (
   category       TEXT        NOT NULL DEFAULT 'user-web',
   allowed_tools  JSONB       NOT NULL DEFAULT '[]',
   tool_choice    TEXT        NOT NULL DEFAULT 'auto' CHECK (tool_choice IN ('auto', 'none', 'required')),
+  stopped        BOOLEAN     NOT NULL DEFAULT FALSE,
   inserted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS stopped BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS text_messages (
   id                 BIGSERIAL   PRIMARY KEY,

@@ -82,6 +82,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
        %{
          state
          | streaming_response: nil,
+           ai_task_pid: nil,
            current_status: :idle,
            messages: state.messages ++ [final_message]
        }}
@@ -172,6 +173,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
      %{
        state
        | messages: state.messages ++ [tool_request_message] ++ failed_call_messages,
+         streaming_response: nil,
          pending_tool_calls: pending_call_ids,
          current_status: :awaiting_tools
      }}
@@ -185,12 +187,6 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
 
     new_pending_tool_calls =
       Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
-
-    new_streaming_response =
-      case new_pending_tool_calls do
-        [] -> nil
-        _ -> state.streaming_response
-      end
 
     if new_pending_tool_calls == [] do
       broadcast_ui(state.name, :tool_calls_finished)
@@ -209,7 +205,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
      %{
        state
        | pending_tool_calls: new_pending_tool_calls,
-         streaming_response: new_streaming_response,
+         streaming_response: nil,
          current_status:
            if(new_pending_tool_calls == [], do: :generating_ai_response, else: :awaiting_tools),
          messages: state.messages ++ [new_message]
@@ -248,6 +244,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
        %{
          state
          | streaming_response: nil,
+           ai_task_pid: nil,
            current_status: :idle,
            messages: state.messages ++ [final_message]
        }}
