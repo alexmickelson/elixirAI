@@ -75,8 +75,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
         tokens_per_second: tps
       }
 
-      broadcast_ui(state.name, {:end_ai_response, final_message})
       store_message(state.conversation_id, state.name, final_message)
+      broadcast_ui(state.name, {:end_ai_response, final_message})
 
       {:noreply,
        %{
@@ -97,19 +97,19 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       ) do
     Logger.info("AI started tool call #{tool_name}")
 
+    new_tool_call = %{
+      name: tool_name,
+      arguments: tool_args_start,
+      index: tool_index,
+      id: tool_call_id
+    }
+
     new_streaming_response = %{
       state.streaming_response
-      | tool_calls:
-          state.streaming_response.tool_calls ++
-            [
-              %{
-                name: tool_name,
-                arguments: tool_args_start,
-                index: tool_index,
-                id: tool_call_id
-              }
-            ]
+      | tool_calls: state.streaming_response.tool_calls ++ [new_tool_call]
     }
+
+    broadcast_ui(state.name, {:streaming_tool_call_start, new_tool_call})
 
     {:noreply, %{state | streaming_response: new_streaming_response}}
   end
@@ -127,39 +127,59 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
           end)
     }
 
+    broadcast_ui(state.name, {:streaming_tool_args_chunk, tool_index, tool_args_diff})
+
     {:noreply, %{state | streaming_response: new_streaming_response}}
   end
 
   def handle({:ai_tool_call_end, id}, state) do
+    raw_tool_calls = Enum.map(state.streaming_response.tool_calls, &Map.delete(&1, :index))
+
+    # Partition into calls with valid JSON args vs. malformed/incomplete ones.
+    # Malformed calls are silently dropped — they never executed and have no value.
+    {valid_tool_calls, dropped_count} =
+      Enum.reduce(raw_tool_calls, {[], 0}, fn tc, {valid, dropped} ->
+        case Jason.decode(tc.arguments) do
+          {:ok, _} ->
+            {[tc | valid], dropped}
+
+          {:error, decode_error} ->
+            Logger.warning("""
+            Dropping tool call — arguments are not valid JSON (likely truncated by stop)
+              conversation: #{state.name} (#{state.conversation_id})
+              tool:         #{tc.name}
+              id:           #{tc.id}
+              error:        #{inspect(decode_error)}
+              args:         #{tc.arguments}
+            """)
+
+            {valid, dropped + 1}
+        end
+      end)
+
+    valid_tool_calls = Enum.reverse(valid_tool_calls)
+
+    if dropped_count > 0 do
+      Logger.info(
+        "Dropped #{dropped_count} malformed tool call(s) for conversation #{state.name} (#{state.conversation_id})"
+      )
+    end
+
     tool_request_message = %{
       role: :assistant,
       content: state.streaming_response.content,
       reasoning_content: state.streaming_response.reasoning_content,
-      tool_calls: Enum.map(state.streaming_response.tool_calls, &Map.delete(&1, :index))
+      tool_calls: valid_tool_calls
     }
 
-    broadcast_ui(state.name, {:tool_request_message, tool_request_message})
-
+    # For valid calls, attempt to dispatch them (unknown tool name is still an error).
     {failed_call_messages, pending_call_ids} =
-      Enum.reduce(state.streaming_response.tool_calls, {[], []}, fn tool_call,
-                                                                    {failed, pending} ->
-        with {:ok, decoded_args} <- Jason.decode(tool_call.arguments),
-             tool when not is_nil(tool) <-
-               Enum.find(state.server_tools ++ state.liveview_tools ++ state.page_tools, fn t ->
-                 t.name == tool_call.name
-               end) do
-          tool.run_function.(id, tool_call.id, decoded_args)
-          {failed, [tool_call.id | pending]}
-        else
-          {:error, e} ->
-            error_msg = "Failed to decode tool arguments: #{inspect(e)}"
-            Logger.error("Tool call #{tool_call.name} failed: #{error_msg}")
+      Enum.reduce(valid_tool_calls, {[], []}, fn tool_call, {failed, pending} ->
+        {:ok, decoded_args} = Jason.decode(tool_call.arguments)
 
-            {[
-               %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
-               | failed
-             ], pending}
-
+        case Enum.find(state.server_tools ++ state.liveview_tools ++ state.page_tools, fn t ->
+               t.name == tool_call.name
+             end) do
           nil ->
             error_msg = "No tool definition found for #{tool_call.name}"
             Logger.error(error_msg)
@@ -168,23 +188,54 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
                %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
                | failed
              ], pending}
+
+          tool ->
+            tool.run_function.(id, tool_call.id, decoded_args)
+            {failed, [tool_call.id | pending]}
         end
       end)
 
-    store_message(
-      state.conversation_id,
-      state.name,
-      [tool_request_message] ++ failed_call_messages
-    )
+    # If all tool calls were malformed (or there were none after filtering),
+    # treat this as a plain text assistant message ending.
+    if valid_tool_calls == [] do
+      final_message = %{
+        role: :assistant,
+        content: state.streaming_response.content,
+        reasoning_content: state.streaming_response.reasoning_content,
+        tool_calls: []
+      }
 
-    {:noreply,
-     %{
-       state
-       | messages: state.messages ++ [tool_request_message] ++ failed_call_messages,
-         streaming_response: nil,
-         pending_tool_calls: pending_call_ids,
-         current_status: :awaiting_tools
-     }}
+      store_message(state.conversation_id, state.name, final_message)
+      broadcast_ui(state.name, {:end_ai_response, final_message})
+
+      {:noreply,
+       %{
+         state
+         | messages: state.messages ++ [final_message],
+           streaming_response: nil,
+           pending_tool_calls: [],
+           current_status: :idle,
+           ai_task_pid: nil
+       }}
+    else
+      store_message(
+        state.conversation_id,
+        state.name,
+        [tool_request_message] ++ failed_call_messages
+      )
+
+      broadcast_ui(state.name, {:tool_request_message, tool_request_message})
+      Enum.each(failed_call_messages, &broadcast_ui(state.name, {:one_tool_finished, &1}))
+
+      {:noreply,
+       %{
+         state
+         | messages: state.messages ++ [tool_request_message] ++ failed_call_messages,
+           streaming_response: nil,
+           pending_tool_calls: pending_call_ids,
+           current_status: :awaiting_tools
+       }}
+    end
   end
 
   def handle({:tool_response, _id, tool_call_id, {:error, reason}}, state) do
@@ -197,8 +248,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       is_error: true
     }
 
-    broadcast_ui(state.name, {:one_tool_finished, new_message})
     store_message(state.conversation_id, state.name, new_message)
+    broadcast_ui(state.name, {:one_tool_finished, new_message})
 
     new_pending_tool_calls =
       Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
@@ -230,8 +281,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   def handle({:tool_response, _id, tool_call_id, result}, state) do
     new_message = %{role: :tool, content: inspect(result), tool_call_id: tool_call_id}
 
-    broadcast_ui(state.name, {:one_tool_finished, new_message})
     store_message(state.conversation_id, state.name, new_message)
+    broadcast_ui(state.name, {:one_tool_finished, new_message})
 
     new_pending_tool_calls =
       Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
@@ -296,8 +347,8 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
         tool_calls: resp.tool_calls
       }
 
-      broadcast_ui(state.name, {:end_ai_response, final_message})
       store_message(state.conversation_id, state.name, final_message)
+      broadcast_ui(state.name, {:end_ai_response, final_message})
 
       {:noreply,
        %{

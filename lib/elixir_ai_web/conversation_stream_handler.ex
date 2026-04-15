@@ -38,16 +38,22 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
   end
 
   def handle({:reasoning_chunk_content, reasoning_content}, socket) do
-    updated = %{
-      socket.assigns.streaming_response
-      | reasoning_content:
-          socket.assigns.streaming_response.reasoning_content <> reasoning_content
-    }
+    # Only update the assign on the first reasoning chunk — this reveals the
+    # toggle button via a LiveView re-render. All subsequent chunks are rendered
+    # client-side via push_event to avoid per-token re-render diffs.
+    socket =
+      if socket.assigns.streaming_response.reasoning_content == "" do
+        assign(socket,
+          streaming_response: %{
+            socket.assigns.streaming_response
+            | reasoning_content: reasoning_content
+          }
+        )
+      else
+        socket
+      end
 
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated)
-     |> push_event("reasoning_chunk", %{chunk: reasoning_content})}
+    {:noreply, push_event(socket, "reasoning_chunk", %{chunk: reasoning_content})}
   end
 
   # Chunk arrived before :start_ai_response_stream — fetch snapshot from runner.
@@ -60,15 +66,38 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
   end
 
   def handle({:text_chunk_content, text_content}, socket) do
-    updated = %{
-      socket.assigns.streaming_response
-      | content: socket.assigns.streaming_response.content <> text_content
-    }
+    # Content is rendered entirely client-side via the MarkdownStream push_event.
+    # Updating the assign on every token triggers a LiveView re-render diff cycle
+    # which calls updated() on the ScrollBottom hook — causing the scroll-to-bottom
+    # race against the user's scroll position.
+    {:noreply, push_event(socket, "md_chunk", %{chunk: text_content})}
+  end
 
-    {:noreply,
-     socket
-     |> assign(streaming_response: updated)
-     |> push_event("md_chunk", %{chunk: text_content})}
+  def handle({:streaming_tool_call_start, tool_call}, socket) do
+    streaming_response =
+      socket.assigns.streaming_response || get_snapshot(socket)
+
+    updated = %{streaming_response | tool_calls: streaming_response.tool_calls ++ [tool_call]}
+    {:noreply, assign(socket, streaming_response: updated)}
+  end
+
+  def handle({:streaming_tool_args_chunk, tool_index, args_diff}, socket) do
+    case socket.assigns.streaming_response do
+      nil ->
+        {:noreply, socket}
+
+      resp ->
+        updated_calls =
+          Enum.map(resp.tool_calls, fn
+            %{index: ^tool_index, arguments: existing} = tc ->
+              %{tc | arguments: existing <> args_diff}
+
+            other ->
+              other
+          end)
+
+        {:noreply, assign(socket, streaming_response: %{resp | tool_calls: updated_calls})}
+    end
   end
 
   def handle(:tool_calls_finished, socket) do

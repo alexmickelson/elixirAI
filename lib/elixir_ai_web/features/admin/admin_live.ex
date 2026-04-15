@@ -108,7 +108,9 @@ defmodule ElixirAiWeb.AdminLive do
   defp gather_node_statuses do
     located = ElixirAi.ClusterSingletonLauncher.singleton_locations()
 
-    Enum.map([Node.self() | Node.list()], fn n ->
+    [Node.self() | Node.list()]
+    |> Enum.sort()
+    |> Enum.map(fn n ->
       status =
         if Enum.any?(located, fn {_, loc} -> loc == n end), do: :running, else: :not_running
 

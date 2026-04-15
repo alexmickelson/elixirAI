@@ -124,7 +124,11 @@ defmodule ElixirAiWeb.HomeLive do
   end
 
   def handle_info(:load_data, socket) do
-    conversations = ConversationManager.list_conversations()
+    conversations =
+      case ConversationManager.list_conversations() do
+        {:error, _} -> []
+        list -> list
+      end
 
     Logger.debug(
       "Conversations: #{inspect(conversations, limit: :infinity, printable_limit: :infinity)}"

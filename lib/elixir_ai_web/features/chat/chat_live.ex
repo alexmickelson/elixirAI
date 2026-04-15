@@ -71,6 +71,25 @@ defmodule ElixirAiWeb.ChatLive do
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
 
+      {:error, :service_unavailable} ->
+        {:ok,
+         socket
+         |> assign(conversation_name: name)
+         |> assign(runner_pid: nil)
+         |> assign(user_input: "")
+         |> assign(messages: [])
+         |> assign(streaming_response: nil)
+         |> assign(background_color: "bg-seafoam-950/30")
+         |> assign(pending_approvals: [])
+         |> assign(provider: nil)
+         |> assign(providers: AiProvider.all())
+         |> assign(
+           db_error:
+             "The conversation service is not available. Please wait a moment and refresh."
+         )
+         |> assign(ai_error: nil)
+         |> assign(runner_status: nil)}
+
       {:error, reason} ->
         Logger.error("Failed to start conversation #{name}: #{inspect(reason)}")
 

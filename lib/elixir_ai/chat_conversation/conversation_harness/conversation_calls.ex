@@ -4,8 +4,8 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
   def handle_cast({:user_message, text_content, tool_choice_override}, state) do
     effective_tool_choice = tool_choice_override || state.tool_choice
     new_message = %{role: :user, content: text_content, tool_choice: tool_choice_override}
-    broadcast_ui(state.name, {:user_chat_message, new_message})
     store_message(state.conversation_id, state.name, new_message)
+    broadcast_ui(state.name, {:user_chat_message, new_message})
 
     new_state = %{
       state

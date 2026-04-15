@@ -132,11 +132,30 @@ defmodule ElixirAi.ChatRunner.Recovery do
     Enum.each(pending_run_calls, fn tc ->
       args =
         case tc.arguments do
-          a when is_map(a) -> a
-          a when is_binary(a) -> Jason.decode!(a)
+          a when is_map(a) ->
+            {:ok, a}
+
+          a when is_binary(a) ->
+            case Jason.decode(a) do
+              {:ok, decoded} ->
+                {:ok, decoded}
+
+              {:error, _} ->
+                Logger.warning(
+                  "Skipping recovery of tool call #{tc.id} — stored arguments are not valid JSON: #{inspect(a)}"
+                )
+
+                :skip
+            end
         end
 
-      AiTools.recover_run_tool_call(self(), tc.id, args["command"] || args[:command])
+      case args do
+        {:ok, decoded} ->
+          AiTools.recover_run_tool_call(self(), tc.id, decoded["command"] || decoded[:command])
+
+        :skip ->
+          :ok
+      end
     end)
 
     recovered_tool_call_ids = Enum.map(pending_run_calls, & &1.id)

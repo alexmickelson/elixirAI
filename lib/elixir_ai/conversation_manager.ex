@@ -30,14 +30,26 @@ defmodule ElixirAi.ConversationManager do
   def create_conversation(name, ai_provider_id, category \\ "user-web", allowed_tools \\ nil) do
     tools = allowed_tools || AiTools.all_tool_names()
     GenServer.call(@name, {:create, name, ai_provider_id, category, tools})
+  catch
+    :exit, {:noproc, _} -> {:error, :service_unavailable}
+    :exit, {:nodedown, _} -> {:error, :service_unavailable}
+    :exit, {:timeout, _} -> {:error, :service_unavailable}
   end
 
   def open_conversation(name) do
     GenServer.call(@name, {:open, name})
+  catch
+    :exit, {:noproc, _} -> {:error, :service_unavailable}
+    :exit, {:nodedown, _} -> {:error, :service_unavailable}
+    :exit, {:timeout, _} -> {:error, :service_unavailable}
   end
 
   def list_conversations do
     GenServer.call(@name, :list)
+  catch
+    :exit, {:noproc, _} -> {:error, :service_unavailable}
+    :exit, {:nodedown, _} -> {:error, :service_unavailable}
+    :exit, {:timeout, _} -> {:error, :service_unavailable}
   end
 
   def get_messages(name) do
