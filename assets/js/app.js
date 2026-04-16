@@ -71,6 +71,26 @@ Hooks.MarkdownStream = {
   },
 };
 
+// Streams raw tool output chunks into a <pre> element as they arrive.
+// Matches by data-tool-call-id to scope events from multiple concurrent tools.
+// Reveals the parent section div on first chunk so an empty section is never shown.
+Hooks.ToolOutputStream = {
+  mounted() {
+    this.handleEvent("tool_chunk", ({ id, chunk }) => {
+      if (this.el.dataset.toolCallId === id) {
+        if (this.el.textContent === "") {
+          const sectionId = this.el.dataset.sectionId;
+          if (sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section) section.classList.remove("hidden");
+          }
+        }
+        this.el.textContent += chunk;
+      }
+    });
+  },
+};
+
 Hooks.ScrollBottom = {
   mounted() {
     this.userScrolledUp = false;
@@ -81,24 +101,15 @@ Hooks.ScrollBottom = {
       this.userScrolledUp = !this.isNearBottom();
     });
 
-    this.observer = new MutationObserver(() => {
-      if (!this.userScrolledUp) this.scrollToBottom();
-    });
-    this.observer.observe(this.el, { childList: true, subtree: true });
-
     this.handleEvent("scroll_to_bottom", () => {
-      requestAnimationFrame(() => {
-        if (!this.userScrolledUp) this.scrollToBottom();
-      });
+      this.userScrolledUp = false;
+      requestAnimationFrame(() => this.scrollToBottom());
     });
 
     requestAnimationFrame(() => this.scrollToBottom());
   },
   updated() {
     if (!this.userScrolledUp) this.scrollToBottom();
-  },
-  destroyed() {
-    this.observer.disconnect();
   },
   isNearBottom() {
     return this.el.scrollTop <= 100;

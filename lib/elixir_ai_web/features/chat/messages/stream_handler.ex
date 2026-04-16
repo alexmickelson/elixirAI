@@ -238,6 +238,60 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
     end
   end
 
+  def handle({:tool_response_chunk, _id, tool_call_id, chunk}, state) do
+    broadcast_ui(state.name, {:tool_result_chunk, tool_call_id, chunk})
+    new_outputs = Map.update(state.streaming_tool_outputs, tool_call_id, chunk, &(&1 <> chunk))
+    {:noreply, %{state | streaming_tool_outputs: new_outputs}}
+  end
+
+  def handle({:tool_response_done, _id, tool_call_id, exit_code, elapsed_ms}, state) do
+    buffered = Map.get(state.streaming_tool_outputs, tool_call_id, "")
+
+    formatted =
+      ElixirAi.CommandRunner.Presentation.format(%{
+        stdout: buffered,
+        stderr: "",
+        exit_code: exit_code,
+        duration_ms: elapsed_ms
+      })
+
+    new_message = %{
+      role: :tool,
+      content: inspect({:ok, formatted}),
+      tool_call_id: tool_call_id
+    }
+
+    store_message(state.conversation_id, state.name, new_message)
+    broadcast_ui(state.name, {:one_tool_finished, new_message})
+
+    new_pending = Enum.filter(state.pending_tool_calls, fn id -> id != tool_call_id end)
+    new_outputs = Map.delete(state.streaming_tool_outputs, tool_call_id)
+
+    if new_pending == [] do
+      broadcast_ui(state.name, :tool_calls_finished)
+
+      ElixirAi.ChatUtils.request_ai_response(
+        self(),
+        messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
+        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        state.provider,
+        state.tool_choice,
+        state.response_format
+      )
+    end
+
+    {:noreply,
+     %{
+       state
+       | pending_tool_calls: new_pending,
+         streaming_tool_outputs: new_outputs,
+         streaming_response: nil,
+         current_status:
+           if(new_pending == [], do: :generating_ai_response, else: :awaiting_tools),
+         messages: state.messages ++ [new_message]
+     }}
+  end
+
   def handle({:tool_response, _id, tool_call_id, {:error, reason}}, state) do
     error_content = if is_binary(reason), do: reason, else: inspect(reason)
 

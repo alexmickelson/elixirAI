@@ -22,7 +22,9 @@ defmodule ElixirAi.ChatRunner do
     :ai_tool_call_start,
     :ai_tool_call_middle,
     :ai_tool_call_end,
-    :tool_response
+    :tool_response,
+    :tool_response_chunk,
+    :tool_response_done
   ]
 
   defp via(name), do: {:via, Horde.Registry, {ElixirAi.ChatRegistry, name}}
@@ -105,6 +107,7 @@ defmodule ElixirAi.ChatRunner do
        system_prompt: nil,
        streaming_response: nil,
        pending_tool_calls: [],
+       streaming_tool_outputs: %{},
        pending_approvals: %{},
        allowed_tools: AiTools.all_tool_names(),
        tool_choice: "auto",

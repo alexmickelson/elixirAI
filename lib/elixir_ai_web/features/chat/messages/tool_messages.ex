@@ -6,6 +6,7 @@ defmodule ElixirAiWeb.ToolMessages do
   defp max_width_class, do: "max-w-full xl:max-w-300"
 
   @tool_output_tuple_pattern ~r/^\{:([a-z][a-z0-9_]*),\s*"(.*)"\}$/s
+  @tool_output_tuple_truncated_pattern ~r/^\{:([a-z][a-z0-9_]*),\s*"(.*)" <> \.\.\.\}$/s
   @string_unescape_pattern ~r/\\(n|t|r|\\|")/
 
   attr :tool_call, :map, required: true
@@ -31,7 +32,7 @@ defmodule ElixirAiWeb.ToolMessages do
 
     error = tool_call[:error] || (result_is_error && result_content)
 
-    {is_cmd, cmd_atom, cmd_body} = parse_command_result(result_content)
+    {is_cmd, cmd_atom, cmd_body, cmd_truncated} = parse_command_result(result_content)
     id = "tm-#{:erlang.phash2({tool_call[:id], tool_call.name, tool_call[:arguments]})}"
 
     assigns =
@@ -47,8 +48,10 @@ defmodule ElixirAiWeb.ToolMessages do
       |> assign(:_is_cmd, is_cmd)
       |> assign(:_cmd_atom, cmd_atom)
       |> assign(:_cmd_body, cmd_body)
+      |> assign(:_cmd_truncated, cmd_truncated)
       |> assign(:_truncated, truncate_args(tool_call[:arguments]))
       |> assign(:_error, error)
+      |> assign(:_tool_call_id, tool_call[:id])
 
     ~H"""
     <div
@@ -92,7 +95,7 @@ defmodule ElixirAiWeb.ToolMessages do
           />
         </svg>
         <span
-          :if={@_approval_decision}
+          :if={@_approval_decision && @_approval_decision != "awaiting_approval"}
           class={[
             "shrink-0 text-[10px]",
             @_approval_decision == "auto_allowed" && "text-seafoam-600/70",
@@ -101,6 +104,13 @@ defmodule ElixirAiWeb.ToolMessages do
           ]}
         >
           {String.replace(@_approval_decision, "_", " ")}
+        </span>
+        <span
+          :if={@_approval_decision == "awaiting_approval"}
+          class="flex items-center gap-1 text-amber-400/80 shrink-0"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse inline-block"></span>
+          <span class="text-[10px]">awaiting approval</span>
         </span>
         <span
           :if={@_state == :called and is_nil(@_approval_decision)}
@@ -131,6 +141,8 @@ defmodule ElixirAiWeb.ToolMessages do
           is_cmd={@_is_cmd}
           cmd_atom={@_cmd_atom}
           cmd_body={@_cmd_body}
+          cmd_truncated={@_cmd_truncated}
+          tool_call_id={@_tool_call_id}
           state={@_state}
           error={@_error}
         />
@@ -148,6 +160,8 @@ defmodule ElixirAiWeb.ToolMessages do
   attr :is_cmd, :boolean, default: false
   attr :cmd_atom, :string, default: nil
   attr :cmd_body, :string, default: nil
+  attr :cmd_truncated, :boolean, default: false
+  attr :tool_call_id, :string, default: nil
   attr :state, :atom, required: true
   attr :error, :string, default: nil
 
@@ -170,6 +184,22 @@ defmodule ElixirAiWeb.ToolMessages do
         </p>
       </div>
     <% end %>
+    <%= if @name == "run" && @state == :called && is_nil(@result_content) && @approval_decision != "awaiting_approval" do %>
+      <div
+        id={"tool-output-section-#{@tool_call_id}"}
+        class="px-3 py-2 border-t border-seafoam-900/40 hidden"
+      >
+        <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">output</div>
+        <pre
+          id={"tool-output-#{@tool_call_id}"}
+          phx-hook="ToolOutputStream"
+          data-tool-call-id={@tool_call_id}
+          data-section-id={"tool-output-section-#{@tool_call_id}"}
+          phx-update="ignore"
+          class="text-seafoam-500/70 whitespace-pre-wrap break-all mt-1"
+        ></pre>
+      </div>
+    <% end %>
     <%= if @result_content && @state != :error do %>
       <div class="px-3 py-2 border-t border-seafoam-900/40">
         <div class="text-seafoam-700 mb-1 uppercase tracking-wider text-[10px]">result</div>
@@ -180,7 +210,10 @@ defmodule ElixirAiWeb.ToolMessages do
           ]}>
             {":" <> @cmd_atom}
           </span>
-          <pre class="text-seafoam-500/70 whitespace-pre-wrap break-all mt-1">{@cmd_body}</pre>
+          <pre class="text-seafoam-300/80 whitespace-pre-wrap wrap-break-word mt-1 leading-relaxed">{@cmd_body}</pre>
+          <span :if={@cmd_truncated} class="text-seafoam-600/60 text-[10px] mt-1 block">
+            … output truncated
+          </span>
         <% else %>
           <pre class="text-emerald-300/80 whitespace-pre-wrap break-all">{@result_content}</pre>
         <% end %>
@@ -262,7 +295,7 @@ defmodule ElixirAiWeb.ToolMessages do
   attr :name, :string, default: nil
   attr :arguments, :any, default: nil
 
-  defp tool_call_args_section(%{name: "run_command", arguments: args} = assigns)
+  defp tool_call_args_section(%{arguments: args} = assigns)
        when not is_nil(args) and args != "" do
     assigns = assign(assigns, :_command, extract_command(args))
 
@@ -270,21 +303,11 @@ defmodule ElixirAiWeb.ToolMessages do
     <div class="px-3 py-2">
       <%= if @_command do %>
         <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">command</div>
-        <pre class="text-seafoam-300 whitespace-pre-wrap break-all"><code>{@_command}</code></pre>
+        <pre class="text-seafoam-300 whitespace-pre-wrap wrap-break-word leading-relaxed"><code>{@_command}</code></pre>
       <% else %>
         <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
         <.json_display json={@arguments} />
       <% end %>
-    </div>
-    """
-  end
-
-  defp tool_call_args_section(%{arguments: args} = assigns)
-       when not is_nil(args) and args != "" do
-    ~H"""
-    <div class="px-3 py-2">
-      <div class="text-seafoam-500 mb-1 uppercase tracking-wider text-[10px]">arguments</div>
-      <.json_display json={@arguments} />
     </div>
     """
   end
@@ -308,13 +331,19 @@ defmodule ElixirAiWeb.ToolMessages do
     """
   end
 
-  defp parse_command_result(nil), do: {false, nil, nil}
-  defp parse_command_result(""), do: {false, nil, nil}
+  defp parse_command_result(nil), do: {false, nil, nil, false}
+  defp parse_command_result(""), do: {false, nil, nil, false}
 
   defp parse_command_result(content) do
     case Regex.run(@tool_output_tuple_pattern, content) do
-      [_, atom, inner] -> {true, atom, unescape_string(inner)}
-      _ -> {false, nil, nil}
+      [_, atom, inner] ->
+        {true, atom, unescape_string(inner), false}
+
+      _ ->
+        case Regex.run(@tool_output_tuple_truncated_pattern, content) do
+          [_, atom, inner] -> {true, atom, unescape_string(inner), true}
+          _ -> {false, nil, nil, false}
+        end
     end
   end
 

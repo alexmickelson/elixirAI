@@ -15,6 +15,64 @@ defmodule ElixirAi.CommandRunner do
   @stderr_marker "__STDERR_MARKER__"
 
   @doc """
+  Execute a shell command and stream output lines to `caller` as they arrive.
+
+  Sends to `caller`:
+    `{:cmd_chunk, tool_call_id, line}` — for each line of combined stdout/stderr
+    `{:cmd_done,  tool_call_id, exit_code, duration_ms}` — when the process exits
+
+  Uses a Port so the GenServer mailbox is not blocked.
+  """
+  def run_bash_stream(shell_command, tool_call_id, caller) when is_binary(shell_command) do
+    container = container_name()
+
+    wrapped =
+      "{\n#{shell_command}\n} 2>&1"
+
+    docker_args = ["exec", container, "bash", "-c", wrapped]
+
+    Logger.info("CommandRunner (stream): #{container} $ #{shell_command}")
+
+    start_time = System.monotonic_time(:millisecond)
+
+    port =
+      Port.open({:spawn_executable, System.find_executable("docker")}, [
+        {:args, docker_args},
+        :binary,
+        :exit_status,
+        :use_stdio,
+        :stderr_to_stdout,
+        {:line, 4096}
+      ])
+
+    stream_loop(port, tool_call_id, caller, start_time, "")
+  end
+
+  defp stream_loop(port, tool_call_id, caller, start_time, buffer) do
+    receive do
+      {^port, {:data, {:eol, line}}} ->
+        full_line = buffer <> line
+        send(caller, {:cmd_chunk, tool_call_id, full_line <> "\n"})
+        stream_loop(port, tool_call_id, caller, start_time, "")
+
+      {^port, {:data, {:noeol, partial}}} ->
+        stream_loop(port, tool_call_id, caller, start_time, buffer <> partial)
+
+      {^port, {:exit_status, code}} ->
+        # flush any remaining buffered partial line
+        unless buffer == "", do: send(caller, {:cmd_chunk, tool_call_id, buffer})
+        duration_ms = System.monotonic_time(:millisecond) - start_time
+        send(caller, {:cmd_done, tool_call_id, code, duration_ms})
+    after
+      300_000 ->
+        Port.close(port)
+        duration_ms = System.monotonic_time(:millisecond) - start_time
+        send(caller, {:cmd_chunk, tool_call_id, "\n[timed out after 5 minutes]\n"})
+        send(caller, {:cmd_done, tool_call_id, 1, duration_ms})
+    end
+  end
+
+  @doc """
   Execute a shell command string via `bash -c` inside the sandbox container.
 
   The command string can contain pipes, chains, redirects — full bash syntax.

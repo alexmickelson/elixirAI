@@ -117,6 +117,10 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
     {:noreply, update(socket, :messages, &(&1 ++ [tool_response]))}
   end
 
+  def handle({:tool_result_chunk, tool_call_id, chunk}, socket) do
+    {:noreply, push_event(socket, "tool_chunk", %{id: tool_call_id, chunk: chunk})}
+  end
+
   def handle({:tool_approval_updated, tool_call_id, decision, justification}, socket) do
     updated_messages =
       Enum.map(socket.assigns.messages, fn msg ->

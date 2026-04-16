@@ -185,7 +185,7 @@ defmodule ElixirAi.AiTools do
           name = :sys.get_state(server).name
           topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
 
-          result =
+          approved? =
             case ElixirAi.CommandApproval.classify(command) do
               {:auto_allow, justification} ->
                 ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
@@ -200,10 +200,17 @@ defmodule ElixirAi.AiTools do
                    {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
                 )
 
-                execute_command(command)
+                true
 
               {:needs_approval, justification} ->
-                {decision, cmd_result} = request_approval(server, command, justification)
+                Phoenix.PubSub.broadcast(
+                  ElixirAi.PubSub,
+                  chat_topic(name),
+                  {:conversation_stream_message,
+                   {:tool_approval_updated, tool_call_id, "awaiting_approval", justification}}
+                )
+
+                decision = request_approval_decision(server, command, justification)
 
                 ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
                   justification: justification,
@@ -217,10 +224,20 @@ defmodule ElixirAi.AiTools do
                    {:tool_approval_updated, tool_call_id, Atom.to_string(decision), justification}}
                 )
 
-                cmd_result
+                decision == :approved
             end
 
-          send(server, {:stream, {:tool_response, current_message_id, tool_call_id, result}})
+          if approved? do
+            ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
+            forward_cmd_stream(server, current_message_id, tool_call_id)
+          else
+            denied_result = {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}
+
+            send(
+              server,
+              {:stream, {:tool_response, current_message_id, tool_call_id, denied_result}}
+            )
+          end
         rescue
           e ->
             reason = Exception.format(:error, e, __STACKTRACE__)
@@ -247,6 +264,29 @@ defmodule ElixirAi.AiTools do
     end
   end
 
+  defp forward_cmd_stream(server, current_message_id, tool_call_id) do
+    receive do
+      {:cmd_chunk, ^tool_call_id, chunk} ->
+        send(server, {:stream, {:tool_response_chunk, current_message_id, tool_call_id, chunk}})
+        forward_cmd_stream(server, current_message_id, tool_call_id)
+
+      {:cmd_done, ^tool_call_id, exit_code, elapsed_ms} ->
+        send(
+          server,
+          {:stream,
+           {:tool_response_done, current_message_id, tool_call_id, exit_code, elapsed_ms}}
+        )
+    after
+      # Generous timeout — the Port itself times out at 5 min
+      310_000 ->
+        send(
+          server,
+          {:stream,
+           {:tool_response, current_message_id, tool_call_id, {:error, "stream receive timeout"}}}
+        )
+    end
+  end
+
   defp request_approval(server, command, reason) do
     ref = make_ref()
     send(server, {:register_pending_approval, ref, self(), command, reason})
@@ -269,6 +309,28 @@ defmodule ElixirAi.AiTools do
       120_000 ->
         {:timed_out,
          {:ok, "[denied] Approval timed out after 2 minutes: #{command}\n[exit:1 | 0ms]"}}
+    end
+  end
+
+  # Returns just the decision atom (:approved | :denied | :timed_out) without
+  # executing the command — callers handle execution themselves.
+  defp request_approval_decision(server, command, reason) do
+    ref = make_ref()
+    send(server, {:register_pending_approval, ref, self(), command, reason})
+
+    name = :sys.get_state(server).name
+
+    Phoenix.PubSub.broadcast(
+      ElixirAi.PubSub,
+      "ai_chat:#{name}",
+      {:tool_approval_request, ref, command, reason}
+    )
+
+    receive do
+      {:approval_response, ^ref, :approved} -> :approved
+      {:approval_response, ^ref, :denied} -> :denied
+    after
+      120_000 -> :timed_out
     end
   end
 
