@@ -229,9 +229,18 @@ defmodule ElixirAiWeb.ChatLive do
             Stop
           </button>
         <% else %>
-          <button type="submit" class="px-4 py-2 rounded text-sm border">
-            Send
-          </button>
+          <%= if @user_input == "" do %>
+            <button
+              type="submit"
+              class="px-4 py-2 rounded text-sm border border-blue-800/50 text-blue-400 hover:bg-blue-950/40 transition-colors"
+            >
+              AI Turn
+            </button>
+          <% else %>
+            <button type="submit" class="px-4 py-2 rounded text-sm border">
+              Send
+            </button>
+          <% end %>
         <% end %>
       </form>
     </div>
@@ -247,6 +256,15 @@ defmodule ElixirAiWeb.ChatLive do
     case ChatRunner.set_provider(socket.assigns.conversation_name, provider_id) do
       {:ok, provider} -> {:noreply, assign(socket, provider: provider)}
       _error -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("submit", %{"user_input" => ""}, socket) do
+    if runner_active?(socket.assigns.runner_status) do
+      {:noreply, socket}
+    else
+      ChatRunner.ai_turn(socket.assigns.conversation_name)
+      {:noreply, socket}
     end
   end
 

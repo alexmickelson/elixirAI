@@ -34,6 +34,10 @@ defmodule ElixirAi.ChatRunner do
     GenServer.cast(via(name), {:conversation, {:user_message, text_content, tool_choice}})
   end
 
+  def ai_turn(name) do
+    GenServer.cast(via(name), {:conversation, :ai_turn})
+  end
+
   def set_allowed_tools(name, tool_names) when is_list(tool_names) do
     GenServer.call(via(name), {:tool_config, {:set_allowed_tools, tool_names}})
   end
@@ -140,6 +144,18 @@ defmodule ElixirAi.ChatRunner do
       end
 
     with_status_broadcast(state, ConversationCalls.handle_cast(inner, state))
+  end
+
+  def handle_cast({:conversation, :ai_turn}, state) do
+    state =
+      if state.stopped do
+        Conversation.set_stopped(state.name, false)
+        %{state | stopped: false}
+      else
+        state
+      end
+
+    with_status_broadcast(state, ConversationCalls.handle_cast(:ai_turn, state))
   end
 
   def handle_cast({:conversation, inner}, state) do
