@@ -94,7 +94,7 @@ defmodule ElixirAi.ChatUtils do
         case Req.post(api_url,
                json: body,
                headers: headers,
-               receive_timeout: 20_000,
+               receive_timeout: 120_000,
                # initial warmup of loading model to ram can take a while
                into: fn {:data, data}, acc ->
                  data
@@ -121,21 +121,33 @@ defmodule ElixirAi.ChatUtils do
   end
 
   def api_message(%{role: :assistant, tool_calls: [_ | _] = tool_calls} = msg) do
-    %{
-      role: "assistant",
-      content: Map.get(msg, :content, ""),
-      tool_calls:
-        Enum.map(tool_calls, fn call ->
-          %{
-            id: call.id,
-            type: "function",
-            function: %{
-              name: call.name,
-              arguments: call.arguments
+    valid_calls =
+      Enum.filter(tool_calls, fn call ->
+        is_binary(call.arguments) and match?({:ok, _}, Jason.decode(call.arguments))
+      end)
+
+    base = %{role: "assistant", content: Map.get(msg, :content, "")}
+
+    case valid_calls do
+      [] ->
+        base
+
+      calls ->
+        Map.put(
+          base,
+          :tool_calls,
+          Enum.map(calls, fn call ->
+            %{
+              id: call.id,
+              type: "function",
+              function: %{
+                name: call.name,
+                arguments: call.arguments
+              }
             }
-          }
-        end)
-    }
+          end)
+        )
+    end
   end
 
   def api_message(%{role: :tool, tool_call_id: tool_call_id, content: content}) do

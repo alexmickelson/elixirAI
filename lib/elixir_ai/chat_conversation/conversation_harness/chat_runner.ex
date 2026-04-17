@@ -163,16 +163,21 @@ defmodule ElixirAi.ChatRunner do
 
         resp
         when resp.content != "" or resp.reasoning_content != "" or resp.tool_calls != [] ->
-          partial_message = %{
-            role: :assistant,
-            content: resp.content,
-            reasoning_content: resp.reasoning_content,
-            tool_calls: Enum.map(resp.tool_calls, &Map.delete(&1, :index)),
-            interrupted: true
-          }
+          # Strip in-progress tool calls — they were never completed and must not be persisted
+          if resp.content != "" or resp.reasoning_content != "" do
+            partial_message = %{
+              role: :assistant,
+              content: resp.content,
+              reasoning_content: resp.reasoning_content,
+              tool_calls: [],
+              interrupted: true
+            }
 
-          store_message(state.conversation_id, state.name, partial_message)
-          {state.messages ++ [partial_message], {:stopped, partial_message}}
+            store_message(state.conversation_id, state.name, partial_message)
+            {state.messages ++ [partial_message], {:stopped, partial_message}}
+          else
+            {state.messages, :stopped}
+          end
 
         _ ->
           {state.messages, :stopped}

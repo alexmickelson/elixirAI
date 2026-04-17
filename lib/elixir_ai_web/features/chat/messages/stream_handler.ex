@@ -69,11 +69,16 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       elapsed_s = max(finished_at - resp.started_at, 1) / 1_000
       tps = Float.round(completion_tokens / elapsed_s, 1)
 
+      valid_tool_calls =
+        Enum.filter(resp.tool_calls, fn tc ->
+          is_binary(tc.arguments) and match?({:ok, _}, Jason.decode(tc.arguments))
+        end)
+
       final_message = %{
         role: :assistant,
         content: resp.content,
         reasoning_content: resp.reasoning_content,
-        tool_calls: resp.tool_calls,
+        tool_calls: valid_tool_calls,
         input_tokens: prompt_tokens,
         output_tokens: completion_tokens,
         tokens_per_second: tps
@@ -398,11 +403,16 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
     if resp[:content_finished_at] do
       Logger.info("Finalizing response via fallback (no usage chunk received)")
 
+      valid_tool_calls =
+        Enum.filter(resp.tool_calls, fn tc ->
+          is_binary(tc.arguments) and match?({:ok, _}, Jason.decode(tc.arguments))
+        end)
+
       final_message = %{
         role: :assistant,
         content: resp.content,
         reasoning_content: resp.reasoning_content,
-        tool_calls: resp.tool_calls
+        tool_calls: valid_tool_calls
       }
 
       store_message(state.conversation_id, state.name, final_message)
