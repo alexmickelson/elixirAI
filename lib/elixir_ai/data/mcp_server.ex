@@ -155,11 +155,36 @@ defmodule ElixirAi.McpServer do
           headers: Map.get(entry, "headers", %{})
         })
 
-      {:ok, _} ->
-        Logger.debug("MCP server '#{name}' already exists, skipping")
+      {:ok, existing} ->
+        new_headers = Map.get(entry, "headers", %{})
+
+        if existing.url != url or existing.headers != new_headers do
+          Logger.info("Updating MCP server '#{name}' from providers config file")
+          update_from_file(name, url, new_headers)
+        else
+          Logger.debug("MCP server '#{name}' already exists and is up to date, skipping")
+        end
 
       {:error, reason} ->
         Logger.warning("Could not check existence of MCP server '#{name}': #{inspect(reason)}")
+    end
+  end
+
+  defp update_from_file(name, url, headers) do
+    sql = """
+    UPDATE mcp_servers SET url = $(url), headers = $(headers)::jsonb, updated_at = NOW()
+    WHERE name = $(name)
+    """
+
+    params = %{
+      "name" => name,
+      "url" => url,
+      "headers" => Jason.encode!(headers)
+    }
+
+    case DbHelpers.run_sql(sql, params, mcp_topic()) do
+      {:error, :db_error} -> {:error, :db_error}
+      _ -> :ok
     end
   end
 

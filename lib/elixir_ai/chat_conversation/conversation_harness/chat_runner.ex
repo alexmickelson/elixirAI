@@ -252,7 +252,7 @@ defmodule ElixirAi.ChatRunner do
     do: LiveviewSession.handle_down(ref, pid, reason, state)
 
   # MCP tools changed — rebuild mcp_tools for this conversation
-  def handle_info(:mcp_tools_updated, state) do
+  def handle_info({:mcp_tools_updated, _tools}, state) do
     mcp_tools = AiTools.build_mcp_tools(self(), state.allowed_tools)
     {:noreply, %{state | mcp_tools: mcp_tools}}
   end

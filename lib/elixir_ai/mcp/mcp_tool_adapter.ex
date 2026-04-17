@@ -28,11 +28,25 @@ defmodule ElixirAi.Mcp.McpToolAdapter do
         Task.start_link(fn ->
           try do
             result =
-              ElixirAi.Mcp.McpServerManager.call_mcp_tool(
-                mcp_server_name,
-                mcp_tool["name"],
-                args
-              )
+              case Anubis.Client.call_tool(
+                     ElixirAi.Mcp.McpServerManager.client_via(mcp_server_name),
+                     mcp_tool["name"],
+                     args,
+                     timeout: 60_000
+                   ) do
+                {:ok, %{result: %{"content" => content}}} when is_list(content) ->
+                  {:ok,
+                   Enum.map_join(content, "\n", fn
+                     %{"type" => "text", "text" => t} -> t
+                     other -> inspect(other)
+                   end)}
+
+                {:ok, %{result: raw}} ->
+                  {:ok, inspect(raw)}
+
+                {:error, reason} ->
+                  {:error, "MCP tool call failed: #{inspect(reason)}"}
+              end
 
             send(
               chat_runner_pid,
@@ -46,6 +60,14 @@ defmodule ElixirAi.Mcp.McpToolAdapter do
               send(
                 chat_runner_pid,
                 {:stream, {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+              )
+          catch
+            :exit, reason ->
+              send(
+                chat_runner_pid,
+                {:stream,
+                 {:tool_response, current_message_id, tool_call_id,
+                  {:error, "MCP server unavailable: #{inspect(reason)}"}}}
               )
           end
         end)

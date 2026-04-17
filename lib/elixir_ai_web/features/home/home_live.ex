@@ -181,6 +181,10 @@ defmodule ElixirAiWeb.HomeLive do
     {:noreply, assign(socket, mcp_servers: McpServer.all())}
   end
 
+  def handle_info({:mcp_tools_updated, _tools}, socket) do
+    {:noreply, assign(socket, mcp_servers: McpServer.all())}
+  end
+
   def handle_info({:error, _reason}, socket) do
     {:noreply, socket}
   end

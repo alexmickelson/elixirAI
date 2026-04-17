@@ -357,7 +357,7 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply, socket}
   end
 
-  def handle_info(:mcp_tools_updated, socket) do
+  def handle_info({:mcp_tools_updated, _tools}, socket) do
     send_update(ElixirAiWeb.ChatToolsLive, id: "chat-tools", mcp_tools_updated: true)
     {:noreply, socket}
   end

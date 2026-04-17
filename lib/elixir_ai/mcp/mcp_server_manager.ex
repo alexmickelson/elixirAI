@@ -4,42 +4,30 @@ defmodule ElixirAi.Mcp.McpServerManager do
 
   On startup, loads MCP server configs from the database and starts an
   `Anubis.Client` for each enabled server under `ElixirAi.Mcp.McpClientSupervisor`.
-  After each client connects, it calls `tools/list` to discover available tools
-  and caches the results.
+  After each client connects (via `Anubis.Client.await_ready/2`), tools are
+  discovered asynchronously and cached in an ETS table.
 
-  Provides:
-  - `list_mcp_tools/0` — all discovered tools grouped by server
-  - `all_mcp_tool_names/0` — flat list of namespaced tool names
-  - `call_mcp_tool/3` — route a tool call to the correct MCP server client
+  When the tool set changes, `{:mcp_tools_updated, [{server_name, [tool_map]}]}`
+  is broadcast on the `mcp_servers` PubSub topic.
+
+  A full MCP process setup runs on each node; chats talk to their local instance.
   """
 
   use GenServer
   require Logger
   import ElixirAi.PubsubTopics
 
-  @tool_discovery_delay 2_000
+  @ets_table :mcp_tools_cache
   @max_connect_attempts 3
-
-  defmodule ServerConfig do
-    @moduledoc false
-    @enforce_keys [:url]
-    defstruct [:url, headers: %{}]
-
-    @type t :: %__MODULE__{url: String.t(), headers: map()}
-  end
 
   defmodule State do
     @moduledoc false
     defstruct clients: %{},
-              tools: %{},
-              configs: %{},
               monitors: %{},
               attempts: %{}
 
     @type t :: %__MODULE__{
             clients: %{String.t() => pid()},
-            tools: %{String.t() => [map()]},
-            configs: %{String.t() => ServerConfig.t()},
             monitors: %{reference() => String.t()},
             attempts: %{String.t() => non_neg_integer()}
           }
@@ -51,51 +39,30 @@ defmodule ElixirAi.Mcp.McpServerManager do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @doc "Returns `[{server_name, [tool_map, ...]}]`."
   def list_mcp_tools do
-    GenServer.call(__MODULE__, :list_mcp_tools, 10_000)
-  catch
-    :exit, _ -> []
-  end
-
-  @doc "Flat list of all namespaced tool names (e.g. `mcp:server:tool`)."
-  def all_mcp_tool_names do
-    case list_mcp_tools() do
-      tools when is_list(tools) ->
-        Enum.flat_map(tools, fn {server_name, server_tools} ->
-          Enum.map(server_tools, fn tool -> "mcp:#{server_name}:#{tool["name"]}" end)
-        end)
-
-      _ ->
-        []
+    case :ets.whereis(@ets_table) do
+      :undefined -> []
+      _ -> :ets.tab2list(@ets_table)
     end
   end
 
-  @doc "Call a tool on the named MCP server. Returns `{:ok, text}` or `{:error, reason}`."
-  def call_mcp_tool(server_name, tool_name, arguments) do
-    GenServer.call(__MODULE__, {:call_tool, server_name, tool_name, arguments}, 60_000)
-  catch
-    :exit, reason -> {:error, "MCP call failed: #{inspect(reason)}"}
+  def client_via(name), do: {:via, Registry, {ElixirAi.McpRegistry, name}}
+
+  def server_status(name) do
+    case Registry.lookup(ElixirAi.McpRegistry, name) do
+      [{_pid, _}] -> :connected
+      [] -> :disconnected
+    end
   end
 
-  @doc "Add and start a new MCP server at runtime."
   def add_server(name, url, headers \\ %{}) do
     GenServer.call(__MODULE__, {:add_server, name, url, headers}, 15_000)
   end
 
-  @doc "Remove an MCP server and stop its client."
   def remove_server(name) do
     GenServer.call(__MODULE__, {:remove_server, name}, 10_000)
   end
 
-  @doc "Returns `:connected | :disconnected` for a given server."
-  def server_status(name) do
-    GenServer.call(__MODULE__, {:server_status, name}, 5_000)
-  catch
-    :exit, _ -> :disconnected
-  end
-
-  @doc "Test connectivity — tries to connect and list tools. Returns `{:ok, tool_count}` or `{:error, reason}`."
   def test_connection(_name, url, headers \\ %{}) do
     Task.async(fn ->
       header_map = if is_map(headers), do: headers, else: %{}
@@ -117,31 +84,37 @@ defmodule ElixirAi.Mcp.McpServerManager do
           id: {:mcp_test, test_id}
         )
 
+      client_name = {:via, Registry, {ElixirAi.McpRegistry, test_id}}
+
       case DynamicSupervisor.start_child(ElixirAi.Mcp.McpClientSupervisor, child_spec) do
-        {:ok, pid} ->
+        {:ok, sup_pid} ->
           result =
             try do
-              Process.sleep(1_500)
+              case Anubis.Client.await_ready(client_name, timeout: 10_000) do
+                :ok ->
+                  case Anubis.Client.list_tools(client_name, timeout: 10_000) do
+                    {:ok, %{result: %{"tools" => tools}}} when is_list(tools) ->
+                      {:ok, length(tools)}
 
-              case Anubis.Client.list_tools(pid, timeout: 10_000) do
-                {:ok, %{result: %{"tools" => tools}}} when is_list(tools) ->
-                  {:ok, length(tools)}
+                    {:ok, %{result: result}} ->
+                      tools = extract_test_tools(result)
+                      if tools != [], do: {:ok, length(tools)}, else: {:error, "No tools found"}
 
-                {:ok, %{result: result}} ->
-                  tools = extract_test_tools(result)
-                  if tools != [], do: {:ok, length(tools)}, else: {:error, "No tools found"}
+                    {:error, reason} ->
+                      {:error, inspect(reason)}
 
-                {:error, reason} ->
-                  {:error, inspect(reason)}
+                    other ->
+                      {:error, "Unexpected: #{inspect(other)}"}
+                  end
 
-                other ->
-                  {:error, "Unexpected: #{inspect(other)}"}
+                _ ->
+                  {:error, "Server did not become ready"}
               end
             catch
               :exit, reason -> {:error, "Connection failed: #{inspect(reason)}"}
             end
 
-          DynamicSupervisor.terminate_child(ElixirAi.Mcp.McpClientSupervisor, pid)
+          DynamicSupervisor.terminate_child(ElixirAi.Mcp.McpClientSupervisor, sup_pid)
           result
 
         {:error, reason} ->
@@ -161,6 +134,12 @@ defmodule ElixirAi.Mcp.McpServerManager do
 
   @impl true
   def init(_opts) do
+    if :ets.whereis(@ets_table) == :undefined do
+      :ets.new(@ets_table, [:set, :public, :named_table, read_concurrency: true])
+    else
+      :ets.delete_all_objects(@ets_table)
+    end
+
     Phoenix.PubSub.subscribe(ElixirAi.PubSub, mcp_topic())
     send(self(), :load_servers)
     {:ok, %State{}}
@@ -168,6 +147,7 @@ defmodule ElixirAi.Mcp.McpServerManager do
 
   @impl true
   def handle_info(:load_servers, %State{} = state) do
+    ElixirAi.McpServer.ensure_mcp_servers_from_file()
     servers = ElixirAi.McpServer.all_enabled()
     Logger.info("McpServerManager loading #{length(servers)} MCP server(s)")
 
@@ -181,16 +161,8 @@ defmodule ElixirAi.Mcp.McpServerManager do
 
   def handle_info({:discover_tools, server_name}, %State{} = state) do
     case Map.get(state.clients, server_name) do
-      nil ->
-        {:noreply, state}
-
-      client_pid ->
-        if Process.alive?(client_pid) do
-          {:noreply, discover_tools(state, server_name, client_pid)}
-        else
-          Logger.warning("MCP client for '#{server_name}' is no longer alive, skipping discovery")
-          {:noreply, remove_client(state, server_name)}
-        end
+      nil -> {:noreply, state}
+      _sup_pid -> {:noreply, discover_tools(state, server_name)}
     end
   end
 
@@ -200,22 +172,15 @@ defmodule ElixirAi.Mcp.McpServerManager do
         {:noreply, state}
 
       {server_name, monitors} ->
-        state = %{state | monitors: monitors}
-
         if reason == :normal do
           Logger.info("MCP client for '#{server_name}' stopped normally")
         else
           Logger.warning("MCP client for '#{server_name}' died: #{inspect(reason)}")
         end
 
-        had_tools = Map.has_key?(state.tools, server_name)
-
-        state = %{
-          state
-          | clients: Map.delete(state.clients, server_name),
-            tools: Map.delete(state.tools, server_name)
-        }
-
+        had_tools = :ets.member(@ets_table, server_name)
+        :ets.delete(@ets_table, server_name)
+        state = %{state | monitors: monitors, clients: Map.delete(state.clients, server_name)}
         if had_tools, do: broadcast_tools_updated()
         {:noreply, state}
     end
@@ -243,25 +208,6 @@ defmodule ElixirAi.Mcp.McpServerManager do
   def handle_info(_msg, %State{} = state), do: {:noreply, state}
 
   @impl true
-  def handle_call(:list_mcp_tools, _from, %State{tools: tools} = state) do
-    {:reply, Enum.to_list(tools), state}
-  end
-
-  def handle_call({:call_tool, server_name, tool_name, arguments}, _from, %State{} = state) do
-    case Map.get(state.clients, server_name) do
-      nil ->
-        {:reply, {:error, "MCP server '#{server_name}' not connected"}, state}
-
-      client_pid ->
-        if Process.alive?(client_pid) do
-          {:reply, do_call_tool(client_pid, tool_name, arguments), state}
-        else
-          {:reply, {:error, "MCP server '#{server_name}' is unavailable"},
-           remove_client(state, server_name)}
-        end
-    end
-  end
-
   def handle_call({:add_server, name, url, headers}, _from, %State{} = state) do
     server = %ElixirAi.McpServer{name: name, url: url, headers: headers, enabled: true}
     state = %{state | attempts: Map.delete(state.attempts, name)}
@@ -271,16 +217,6 @@ defmodule ElixirAi.Mcp.McpServerManager do
   def handle_call({:remove_server, name}, _from, %State{} = state) do
     state = stop_client(state, name)
     {:reply, :ok, %{state | attempts: Map.delete(state.attempts, name)}}
-  end
-
-  def handle_call({:server_status, name}, _from, %State{} = state) do
-    status =
-      case Map.get(state.clients, name) do
-        nil -> :disconnected
-        pid -> if Process.alive?(pid), do: :connected, else: :disconnected
-      end
-
-    {:reply, status, state}
   end
 
   # ── Private helpers ─────────────────────────────────────────────────────────
@@ -322,12 +258,21 @@ defmodule ElixirAi.Mcp.McpServerManager do
       {:ok, pid} ->
         Logger.info("Started MCP client for '#{name}' at #{url} (attempt #{attempt})")
         ref = Process.monitor(pid)
-        Process.send_after(self(), {:discover_tools, name}, @tool_discovery_delay)
+        manager = self()
+
+        Task.start_link(fn ->
+          case Anubis.Client.await_ready(client_via(name), timeout: 10_000) do
+            :ok ->
+              send(manager, {:discover_tools, name})
+
+            _ ->
+              Logger.warning("MCP client '#{name}' never became ready, skipping tool discovery")
+          end
+        end)
 
         %{
           state
           | clients: Map.put(state.clients, name, pid),
-            configs: Map.put(state.configs, name, %ServerConfig{url: url, headers: header_map}),
             monitors: Map.put(state.monitors, ref, name),
             attempts: Map.put(state.attempts, name, attempt)
         }
@@ -343,14 +288,8 @@ defmodule ElixirAi.Mcp.McpServerManager do
       nil ->
         state
 
-      _pid ->
-        case Registry.lookup(ElixirAi.McpRegistry, name) do
-          [{pid, _}] ->
-            DynamicSupervisor.terminate_child(ElixirAi.Mcp.McpClientSupervisor, pid)
-
-          _ ->
-            :ok
-        end
+      sup_pid ->
+        DynamicSupervisor.terminate_child(ElixirAi.Mcp.McpClientSupervisor, sup_pid)
 
         {ref, monitors} =
           Enum.reduce(state.monitors, {nil, state.monitors}, fn {r, n}, {found, acc} ->
@@ -358,49 +297,41 @@ defmodule ElixirAi.Mcp.McpServerManager do
           end)
 
         if ref, do: Process.demonitor(ref, [:flush])
-
-        %{
-          state
-          | clients: Map.delete(state.clients, name),
-            tools: Map.delete(state.tools, name),
-            configs: Map.delete(state.configs, name),
-            monitors: monitors
-        }
+        :ets.delete(@ets_table, name)
+        %{state | clients: Map.delete(state.clients, name), monitors: monitors}
     end
   end
 
   defp remove_client(%State{} = state, name) do
-    %{
-      state
-      | clients: Map.delete(state.clients, name),
-        tools: Map.delete(state.tools, name)
-    }
+    :ets.delete(@ets_table, name)
+    %{state | clients: Map.delete(state.clients, name)}
   end
 
-  defp discover_tools(%State{} = state, server_name, client_pid) do
-    case Anubis.Client.list_tools(client_pid, timeout: 10_000) do
+  defp discover_tools(%State{} = state, server_name) do
+    case Anubis.Client.list_tools(client_via(server_name), timeout: 10_000) do
       {:ok, %{result: %{"tools" => tools}}} when is_list(tools) ->
         Logger.info(
-          "Discovered #{length(tools)} tool(s) from MCP server '#{server_name}': #{inspect(Enum.map(tools, & &1["name"]))}"
+          "Discovered #{length(tools)} tool(s) from '#{server_name}': #{inspect(Enum.map(tools, & &1["name"]))}"
         )
 
+        :ets.insert(@ets_table, {server_name, tools})
         broadcast_tools_updated()
-        %{state | tools: Map.put(state.tools, server_name, tools)}
+        state
 
       {:ok, %{result: result}} ->
         tools = extract_tools(result)
 
         if tools != [] do
           Logger.info("Discovered #{length(tools)} tool(s) from MCP server '#{server_name}'")
+          :ets.insert(@ets_table, {server_name, tools})
           broadcast_tools_updated()
-          %{state | tools: Map.put(state.tools, server_name, tools)}
         else
           Logger.warning(
             "MCP server '#{server_name}' returned unexpected tools/list response: #{inspect(result)}"
           )
-
-          state
         end
+
+        state
 
       {:error, reason} ->
         Logger.warning(
@@ -410,10 +341,7 @@ defmodule ElixirAi.Mcp.McpServerManager do
         state
 
       other ->
-        Logger.warning(
-          "Unexpected response from MCP server '#{server_name}' tools/list: #{inspect(other)}"
-        )
-
+        Logger.warning("Unexpected tools/list response from '#{server_name}': #{inspect(other)}")
         state
     end
   catch
@@ -429,35 +357,9 @@ defmodule ElixirAi.Mcp.McpServerManager do
   defp extract_tools(tools) when is_list(tools), do: tools
   defp extract_tools(_), do: []
 
-  defp do_call_tool(client_pid, tool_name, arguments) do
-    case Anubis.Client.call_tool(client_pid, tool_name, arguments, timeout: 60_000) do
-      {:ok, %{result: %{"content" => content}}} when is_list(content) ->
-        text =
-          content
-          |> Enum.map(fn
-            %{"type" => "text", "text" => t} -> t
-            other -> inspect(other)
-          end)
-          |> Enum.join("\n")
-
-        {:ok, text}
-
-      {:ok, %{result: result}} ->
-        {:ok, inspect(result)}
-
-      {:error, reason} ->
-        {:error, "MCP tool call failed: #{inspect(reason)}"}
-
-      other ->
-        {:error, "Unexpected MCP response: #{inspect(other)}"}
-    end
-  catch
-    :exit, reason ->
-      {:error, "MCP server unavailable: #{inspect(reason)}"}
-  end
-
   defp broadcast_tools_updated do
-    Phoenix.PubSub.broadcast(ElixirAi.PubSub, mcp_topic(), :mcp_tools_updated)
+    tools = :ets.tab2list(@ets_table)
+    Phoenix.PubSub.broadcast(ElixirAi.PubSub, mcp_topic(), {:mcp_tools_updated, tools})
   end
 
   # Splits a user-provided URL like "http://host:3000/mcp" into
@@ -474,6 +376,5 @@ defmodule ElixirAi.Mcp.McpServerManager do
     end
   end
 
-  defp client_via(name), do: {:via, Registry, {ElixirAi.McpRegistry, name}}
   defp transport_via(name), do: {:via, Registry, {ElixirAi.McpRegistry, {name, :transport}}}
 end
