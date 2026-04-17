@@ -3,12 +3,23 @@ defmodule ElixirAiWeb.ChatToolsLive do
   import ElixirAiWeb.FormComponents
   alias ElixirAi.{AiTools, ChatRunner}
 
+  def update(%{mcp_tools_updated: true} = assigns, socket) do
+    all = AiTools.all_tool_names()
+    grouped = group_tools(all)
+
+    {:ok,
+     socket
+     |> assign(assigns)
+     |> assign(all_tools: all, tool_groups: grouped)}
+  end
+
   def update(assigns, socket) do
     {:ok,
      socket
      |> assign(assigns)
      |> assign_new(:open, fn -> false end)
      |> assign_new(:all_tools, fn -> AiTools.all_tool_names() end)
+     |> assign_new(:tool_groups, fn -> group_tools(AiTools.all_tool_names()) end)
      |> assign_new(:allowed_tools, fn ->
        case get_allowed_tools(assigns) do
          tools when is_list(tools) -> tools
@@ -44,24 +55,31 @@ defmodule ElixirAiWeb.ChatToolsLive do
       </button>
 
       <%= if @open do %>
-        <div class="absolute bottom-full mb-2 right-0 w-64 rounded-lg border border-seafoam-900/40 bg-seafoam-950 shadow-lg z-50">
+        <div class="absolute bottom-full mb-2 right-0 w-72 max-h-96 overflow-y-auto rounded-lg border border-seafoam-900/40 bg-seafoam-950 shadow-lg z-50">
           <div class="px-3 py-2 border-b border-seafoam-900/40">
             <span class="text-sm font-medium text-seafoam-300">Toggle Tools</span>
           </div>
-          <ul class="py-1">
-            <%= for tool <- @all_tools do %>
-              <li class="px-3 py-1.5">
-                <.toggle
-                  id={"chat-tool-#{tool}"}
-                  checked={tool in @allowed_tools}
-                  label={tool}
-                  phx-click="toggle_tool"
-                  phx-value-tool={tool}
-                  phx-target={@myself}
-                />
-              </li>
-            <% end %>
-          </ul>
+          <%= for {group_label, tools} <- @tool_groups do %>
+            <div class="px-3 pt-2 pb-1">
+              <span class="text-[10px] uppercase tracking-wider text-seafoam-600 font-medium">
+                {group_label}
+              </span>
+            </div>
+            <ul class="py-1">
+              <%= for tool <- tools do %>
+                <li class="px-3 py-1.5">
+                  <.toggle
+                    id={"chat-tool-#{tool}"}
+                    checked={tool in @allowed_tools}
+                    label={display_tool_name(tool)}
+                    phx-click="toggle_tool"
+                    phx-value-tool={tool}
+                    phx-target={@myself}
+                  />
+                </li>
+              <% end %>
+            </ul>
+          <% end %>
         </div>
       <% end %>
     </div>
@@ -101,4 +119,32 @@ defmodule ElixirAiWeb.ChatToolsLive do
   end
 
   defp get_allowed_tools(_), do: nil
+
+  # Groups tool names into [{label, [tool_names]}] for sectioned display.
+  # Built-in tools go under "Built-in", MCP tools grouped by server name.
+  defp group_tools(all_tools) do
+    {builtin, mcp} = Enum.split_with(all_tools, &(not String.starts_with?(&1, "mcp:")))
+
+    mcp_groups =
+      mcp
+      |> Enum.group_by(fn name ->
+        case String.split(name, ":", parts: 3) do
+          ["mcp", server, _tool] -> server
+          _ -> "mcp"
+        end
+      end)
+      |> Enum.sort_by(&elem(&1, 0))
+      |> Enum.map(fn {server, tools} -> {"MCP: #{server}", tools} end)
+
+    [{"Built-in", builtin} | mcp_groups]
+    |> Enum.reject(fn {_, tools} -> tools == [] end)
+  end
+
+  # Strips the "mcp:server:" prefix for cleaner display in the toggle list.
+  defp display_tool_name(name) do
+    case String.split(name, ":", parts: 3) do
+      ["mcp", _server, tool_name] -> tool_name
+      _ -> name
+    end
+  end
 end

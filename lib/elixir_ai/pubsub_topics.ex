@@ -3,4 +3,5 @@ defmodule ElixirAi.PubsubTopics do
   def chat_topic(name), do: "ai_chat:#{name}"
   def providers_topic, do: "providers"
   def admin_topic, do: "admin"
+  def mcp_topic, do: "mcp_servers"
 end

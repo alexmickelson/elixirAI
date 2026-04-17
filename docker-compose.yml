@@ -115,6 +115,20 @@ services:
       timeout: 5s
       retries: 3
 
+  mcp-searxng:
+    image: isokoliuk/mcp-searxng:latest
+    container_name: mcp-searxng
+    hostname: mcp-searxng
+    environment:
+      SEARXNG_URL: ${SEARXNG_URL}
+      MCP_HTTP_PORT: "3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   nginx:
     image: nginx:alpine
     ports:

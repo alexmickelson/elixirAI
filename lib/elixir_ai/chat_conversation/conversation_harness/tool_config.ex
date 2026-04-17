@@ -10,13 +10,15 @@ defmodule ElixirAi.ChatRunner.ToolConfig do
     Conversation.update_allowed_tools(state.name, tool_names)
     server_tools = AiTools.build_server_tools(self(), tool_names)
     liveview_tools = AiTools.build_liveview_tools(self(), tool_names)
+    mcp_tools = AiTools.build_mcp_tools(self(), tool_names)
 
     {:reply, :ok,
      %{
        state
        | allowed_tools: tool_names,
          server_tools: server_tools,
-         liveview_tools: liveview_tools
+         liveview_tools: liveview_tools,
+         mcp_tools: mcp_tools
      }}
   end
 

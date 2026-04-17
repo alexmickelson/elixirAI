@@ -17,7 +17,7 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
       ElixirAi.ChatUtils.request_ai_response(
         self(),
         messages_with_system_prompt(new_state.messages, state.system_prompt),
-        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        state.server_tools ++ state.liveview_tools ++ state.page_tools ++ state.mcp_tools,
         state.provider,
         effective_tool_choice,
         state.response_format

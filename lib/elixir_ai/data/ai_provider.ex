@@ -275,6 +275,7 @@ defmodule ElixirAi.AiProvider do
   def ensure_configured_providers do
     ensure_default_provider()
     ensure_providers_from_file()
+    ElixirAi.McpServer.ensure_mcp_servers_from_file()
   end
 
   defp ensure_provider_from_yaml(

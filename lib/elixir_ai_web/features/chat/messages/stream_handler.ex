@@ -2,6 +2,10 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   require Logger
   import ElixirAi.ChatRunner.OutboundHelpers
 
+  defp all_tools(state) do
+    state.server_tools ++ state.liveview_tools ++ state.page_tools ++ state.mcp_tools
+  end
+
   def handle({:start_new_ai_response, id}, state) do
     starting_response = %{
       id: id,
@@ -177,7 +181,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       Enum.reduce(valid_tool_calls, {[], []}, fn tool_call, {failed, pending} ->
         {:ok, decoded_args} = Jason.decode(tool_call.arguments)
 
-        case Enum.find(state.server_tools ++ state.liveview_tools ++ state.page_tools, fn t ->
+        case Enum.find(all_tools(state), fn t ->
                t.name == tool_call.name
              end) do
           nil ->
@@ -273,7 +277,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       ElixirAi.ChatUtils.request_ai_response(
         self(),
         messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
-        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        all_tools(state),
         state.provider,
         state.tool_choice,
         state.response_format
@@ -314,7 +318,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       ElixirAi.ChatUtils.request_ai_response(
         self(),
         messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
-        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        all_tools(state),
         state.provider,
         state.tool_choice,
         state.response_format
@@ -347,7 +351,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       ElixirAi.ChatUtils.request_ai_response(
         self(),
         messages_with_system_prompt(state.messages ++ [new_message], state.system_prompt),
-        state.server_tools ++ state.liveview_tools ++ state.page_tools,
+        all_tools(state),
         state.provider,
         state.tool_choice,
         state.response_format

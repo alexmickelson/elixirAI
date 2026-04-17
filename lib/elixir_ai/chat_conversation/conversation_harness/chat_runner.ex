@@ -97,6 +97,7 @@ defmodule ElixirAi.ChatRunner do
 
   def init(name) do
     Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
+    Phoenix.PubSub.subscribe(ElixirAi.PubSub, "mcp_servers")
     :pg.join(ElixirAi.RunnerPG, {:runner, name}, self())
 
     {:ok,
@@ -113,6 +114,7 @@ defmodule ElixirAi.ChatRunner do
        tool_choice: "auto",
        server_tools: [],
        liveview_tools: [],
+       mcp_tools: [],
        page_tools: [],
        provider: nil,
        response_format: nil,
@@ -248,6 +250,12 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_info({:DOWN, ref, :process, pid, reason}, state),
     do: LiveviewSession.handle_down(ref, pid, reason, state)
+
+  # MCP tools changed — rebuild mcp_tools for this conversation
+  def handle_info(:mcp_tools_updated, state) do
+    mcp_tools = AiTools.build_mcp_tools(self(), state.allowed_tools)
+    {:noreply, %{state | mcp_tools: mcp_tools}}
+  end
 
   def handle_call({:conversation, inner}, from, state),
     do: ConversationCalls.handle_call(inner, from, state)

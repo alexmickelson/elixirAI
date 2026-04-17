@@ -12,3 +12,11 @@ providers:
     capabilities:
       - text
       - image
+
+mcp_servers:
+  - name: example-server
+    url: http://localhost:8080/mcp
+  - name: authenticated-server
+    url: http://localhost:9090/mcp
+    headers:
+      Authorization: "Bearer your_token_here"

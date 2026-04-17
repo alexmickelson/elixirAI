@@ -67,6 +67,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
 
     server_tools = AiTools.build_server_tools(self(), allowed_tools)
     liveview_tools = AiTools.build_liveview_tools(self(), allowed_tools)
+    mcp_tools = AiTools.build_mcp_tools(self(), allowed_tools)
 
     {recovered_tool_call_ids, recovery_task_pid} =
       recover_pending_state(
@@ -76,6 +77,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
         system_prompt,
         server_tools,
         liveview_tools,
+        mcp_tools,
         provider,
         tool_choice,
         stopped,
@@ -94,6 +96,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
          tool_choice: tool_choice,
          server_tools: server_tools,
          liveview_tools: liveview_tools,
+         mcp_tools: mcp_tools,
          provider: provider,
          pending_tool_calls: recovered_tool_call_ids,
          current_status: recovered_status,
@@ -116,6 +119,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
          system_prompt,
          server_tools,
          liveview_tools,
+         mcp_tools,
          provider,
          tool_choice,
          stopped,
@@ -168,6 +172,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
         system_prompt,
         server_tools,
         liveview_tools,
+        mcp_tools,
         provider,
         tool_choice,
         stopped,
@@ -205,6 +210,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
          system_prompt,
          server_tools,
          liveview_tools,
+         mcp_tools,
          provider,
          tool_choice,
          stopped,
@@ -223,7 +229,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
         ElixirAi.ChatUtils.request_ai_response(
           self(),
           messages_with_system_prompt(messages, system_prompt),
-          server_tools ++ liveview_tools,
+          server_tools ++ liveview_tools ++ mcp_tools,
           provider,
           tool_choice,
           response_format

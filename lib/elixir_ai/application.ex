@@ -25,6 +25,9 @@ defmodule ElixirAi.Application do
       {DynamicSupervisor, name: ElixirAi.AudioWorkerSupervisor, strategy: :one_for_one},
       ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint,
+      {Registry, keys: :unique, name: ElixirAi.McpRegistry},
+      {DynamicSupervisor, name: ElixirAi.Mcp.McpClientSupervisor, strategy: :one_for_one},
+      mcp_server_manager_child_spec(),
       {Horde.Registry,
        [
          name: ElixirAi.ChatRegistry,
@@ -71,6 +74,14 @@ defmodule ElixirAi.Application do
       Supervisor.child_spec({Task, fn -> :ok end}, id: {:skip_cluster_singleton, module})
     else
       {ElixirAi.ClusterSingletonLauncher, module: module}
+    end
+  end
+
+  defp mcp_server_manager_child_spec do
+    if Application.get_env(:elixir_ai, :env) == :test do
+      Supervisor.child_spec({Task, fn -> :ok end}, id: :skip_mcp_server_manager)
+    else
+      ElixirAi.Mcp.McpServerManager
     end
   end
 end

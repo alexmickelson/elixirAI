@@ -80,3 +80,13 @@ CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_text_msg      ON tool_calls_reques
 CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_tool_call_id  ON tool_calls_request_messages(tool_call_id);
 CREATE INDEX IF NOT EXISTS idx_tool_response_msgs_prev      ON tool_response_messages(prev_message_id);
 CREATE INDEX IF NOT EXISTS idx_ai_provider_capabilities_provider ON ai_provider_capabilities(ai_provider_id);
+
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT        NOT NULL UNIQUE,
+  url         TEXT        NOT NULL,
+  headers     JSONB       NOT NULL DEFAULT '{}',
+  enabled     BOOLEAN     NOT NULL DEFAULT TRUE,
+  inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
