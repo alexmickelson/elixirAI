@@ -102,14 +102,12 @@ services:
       retries: 5
 
   command_runner:
-    build:
-      context: ./sandbox
-      dockerfile: Dockerfile
+    image: docker.io/alexmickelson/ai-sandbox-container:3
     container_name: command_runner
     hostname: command_runner
     volumes:
       - sandbox_home:/home/sandbox
-      - ./sandbox/mcp-servers.json:/etc/mcp/servers.json:ro
+      - ./sandbox/mcp-servers.json:/etc/mcp/mcp-servers.json:ro
     healthcheck:
       test: ["CMD", "echo", "ok"]
       interval: 10s
