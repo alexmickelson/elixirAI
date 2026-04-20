@@ -172,6 +172,13 @@ defmodule ElixirAi.AiTools do
           jq                        — parse JSON
           git                       — version control
           bash                      — scripting
+          mcp-cli                   — interact with MCP tool servers
+
+        MCP tool servers (mcp-cli):
+          mcp-cli list                                  list servers + example commands
+          mcp-cli tools [SERVER]                        list available tools
+          mcp-cli tools SERVER TOOL [key=value ...]     call a tool
+          mcp-cli schema SERVER TOOL                    show a tool's input schema
 
         Use --help on any command for detailed usage (e.g. "grep --help").
         Large outputs are automatically truncated with a path to the full file.

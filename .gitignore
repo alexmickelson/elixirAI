@@ -16,3 +16,4 @@ elixir_ls/
 .env
 *.tmp
 providers.yml
+sandbox/mcp-servers.json

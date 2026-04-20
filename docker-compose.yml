@@ -109,6 +109,7 @@ services:
     hostname: command_runner
     volumes:
       - sandbox_home:/home/sandbox
+      - ./sandbox/mcp-servers.json:/etc/mcp/servers.json:ro
     healthcheck:
       test: ["CMD", "echo", "ok"]
       interval: 10s
@@ -126,8 +127,8 @@ services:
       MCP_HTTP_PORT: "3000"
       MCP_HTTP_HARDEN: "true"
       MCP_HTTP_AUTH_TOKEN: ${MCP_HTTP_AUTH_TOKEN}
-      MCP_HTTP_ALLOWED_ORIGINS: "http://node1:4000,http://node2:4000"
-      MCP_HTTP_ALLOWED_HOSTS: "mcp-searxng,mcp-searxng:3000"
+      MCP_HTTP_ALLOWED_ORIGINS: "http://node1:4000,http://node2:4000,http://command_runner"
+      MCP_HTTP_ALLOWED_HOSTS: "mcp-searxng,mcp-searxng:3000,command_runner"
       MCP_HTTP_ALLOW_PRIVATE_URLS: "true"
     restart: unless-stopped
     healthcheck:

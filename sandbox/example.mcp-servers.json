@@ -1,0 +1,11 @@
+{
+  "servers": [
+    {
+      "name": "example-server",
+      "url": "http://mcp-server-host:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer your_token_here"
+      }
+    }
+  ]
+}
