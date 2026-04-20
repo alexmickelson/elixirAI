@@ -23,7 +23,6 @@ defmodule ElixirAi.Application do
       {ElixirAi.PageToolsPG, []},
       {ElixirAi.AudioProcessingPG, []},
       {DynamicSupervisor, name: ElixirAi.AudioWorkerSupervisor, strategy: :one_for_one},
-      ElixirAi.ToolTesting,
       ElixirAiWeb.Endpoint,
       {Registry, keys: :unique, name: ElixirAi.McpRegistry},
       {DynamicSupervisor, name: ElixirAi.Mcp.McpClientSupervisor, strategy: :one_for_one},

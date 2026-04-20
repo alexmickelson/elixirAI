@@ -4,14 +4,6 @@ defmodule ElixirAi.AiTools do
 
   Tools are split into two categories:
 
-  - **Server tools** (`store_thing`, `read_thing`): functions are fully defined
-    here and always execute regardless of whether a browser session is open.
-
-  - **LiveView tools** (`set_background_color`, `navigate_to`): functions
-    dispatch to the registered LiveView pid. If no browser tab is connected
-    the call still succeeds immediately with a descriptive result so the AI
-    conversation is never blocked.
-
   Tool names are stored in the `conversations` table (`allowed_tools` column)
   and act as the gate for which tools are active for a given conversation.
   """
@@ -20,7 +12,7 @@ defmodule ElixirAi.AiTools do
   import ElixirAi.PubsubTopics, only: [chat_topic: 1]
   require Logger
 
-  @server_tool_names ["store_thing", "read_thing", "list_conversations", "run"]
+  @server_tool_names ["list_conversations", "run"]
   @liveview_tool_names ["set_background_color", "navigate_to"]
   @builtin_tool_names @server_tool_names ++ @liveview_tool_names
 
@@ -37,7 +29,7 @@ defmodule ElixirAi.AiTools do
   end
 
   def build_server_tools(server, allowed_names) do
-    [store_thing(server), read_thing(server), list_conversations(server), run(server)]
+    [list_conversations(server), run(server)]
     |> Enum.filter(&(&1.name in allowed_names))
   end
 
@@ -112,26 +104,6 @@ defmodule ElixirAi.AiTools do
   # Server tools
   # ---------------------------------------------------------------------------
 
-  def store_thing(server) do
-    ai_tool(
-      name: "store_thing",
-      description: "store a key value pair in memory",
-      function: &ElixirAi.ToolTesting.hold_thing/1,
-      parameters: ElixirAi.ToolTesting.hold_thing_params(),
-      server: server
-    )
-  end
-
-  def read_thing(server) do
-    ai_tool(
-      name: "read_thing",
-      description: "read a key value pair that was previously stored with store_thing",
-      function: &ElixirAi.ToolTesting.get_thing/1,
-      parameters: ElixirAi.ToolTesting.get_thing_params(),
-      server: server
-    )
-  end
-
   def list_conversations(server) do
     ai_tool(
       name: "list_conversations",
@@ -155,32 +127,20 @@ defmodule ElixirAi.AiTools do
       "function" => %{
         "name" => "run",
         "description" => """
-        Execute a command in the sandboxed container. Supports full bash syntax
-        including pipes (|), chains (&&, ||), semicolons (;), and redirects.
+        Execute a command in the sandboxed container.
 
-        One call can be a complete workflow:
+        Examples:
           cat log.txt | grep ERROR | wc -l
           curl -sL $URL -o data.csv && head -5 data.csv
           cat config.yaml || echo "not found, using defaults"
 
-        Available tools in the sandbox:
-          cat, head, tail, less     — read files
-          grep, sed, awk            — filter and transform text
-          sort, uniq, wc, tr, cut   — text processing
-          find, ls, tree, file      — explore filesystem
-          curl, wget                — fetch URLs
-          jq                        — parse JSON
-          git                       — version control
-          bash                      — scripting
-          mcp-cli                   — interact with MCP tool servers
+        MCP examples:
+          mcp-cli list
+          mcp-cli tools SERVER
+          mcp-cli tools SERVER TOOL key="value"
+          mcp-cli schema SERVER TOOL
 
-        MCP tool servers (mcp-cli):
-          mcp-cli list                                  list servers + example commands
-          mcp-cli tools [SERVER]                        list available tools
-          mcp-cli tools SERVER TOOL [key=value ...]     call a tool
-          mcp-cli schema SERVER TOOL                    show a tool's input schema
-
-        Use --help on any command for detailed usage (e.g. "grep --help").
+        Use --help for command details (e.g. "grep --help", "mcp-cli tools --help").
         Large outputs are automatically truncated with a path to the full file.
         """,
         "parameters" => %{

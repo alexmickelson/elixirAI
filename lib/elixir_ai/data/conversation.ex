@@ -34,7 +34,7 @@ defmodule ElixirAi.Conversation do
   end
 
   def all_names do
-    sql = "SELECT name, category FROM conversations"
+    sql = "SELECT name, category FROM conversations WHERE deleted_at IS NULL"
     params = %{}
 
     schema = Zoi.object(%{name: Zoi.string(), category: Zoi.string()})
@@ -94,6 +94,21 @@ defmodule ElixirAi.Conversation do
 
       :error ->
         {:error, :invalid_uuid}
+    end
+  end
+
+  def soft_delete(name) do
+    sql = """
+    UPDATE conversations
+    SET deleted_at = NOW(), updated_at = NOW()
+    WHERE name = $(name) AND deleted_at IS NULL
+    """
+
+    params = %{"name" => name}
+
+    case DbHelpers.run_sql(sql, params, "conversations") do
+      {:error, :db_error} -> {:error, :db_error}
+      _ -> :ok
     end
   end
 

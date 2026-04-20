@@ -266,7 +266,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
 
     new_message = %{
       role: :tool,
-      content: inspect({:ok, formatted}),
+      content: inspect({:ok, formatted}, printable_limit: :infinity),
       tool_call_id: tool_call_id
     }
 
@@ -342,7 +342,11 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   end
 
   def handle({:tool_response, _id, tool_call_id, result}, state) do
-    new_message = %{role: :tool, content: inspect(result), tool_call_id: tool_call_id}
+    new_message = %{
+      role: :tool,
+      content: inspect(result, printable_limit: :infinity),
+      tool_call_id: tool_call_id
+    }
 
     store_message(state.conversation_id, state.name, new_message)
     broadcast_ui(state.name, {:one_tool_finished, new_message})

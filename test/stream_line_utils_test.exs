@@ -30,15 +30,15 @@ defmodule ElixirAi.AiUtils.StreamLineUtilsTest do
     test "handles error response", %{server: server} do
       line = error_chunk("API rate limit exceeded", "rate_limit_error")
 
-      assert :ok = StreamLineUtils.handle_stream_line(server, line)
-      refute_received _
+      StreamLineUtils.handle_stream_line(server, line)
+      assert_received {:stream, {:ai_request_error, _}}
     end
 
     test "handles error response from JSON", %{server: server} do
       json_string = ~s({"error":{"message":"Invalid request","type":"invalid_request_error"}})
 
-      assert :ok = StreamLineUtils.handle_stream_line(server, json_string)
-      refute_received _
+      StreamLineUtils.handle_stream_line(server, json_string)
+      assert_received {:stream, {:ai_request_error, _}}
     end
 
     test "handles unmatched message structure", %{server: server} do

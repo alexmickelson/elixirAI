@@ -1,7 +1,7 @@
 defmodule ElixirAi.ConversationManager do
   use GenServer
   alias ElixirAi.{Conversation, AiTools}
-  import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1]
+  import ElixirAi.PubsubTopics, only: [conversation_message_topic: 1, conversations_topic: 0]
   require Logger
 
   @name {:via, Horde.Registry, {ElixirAi.ChatRegistry, __MODULE__}}
@@ -60,6 +60,14 @@ defmodule ElixirAi.ConversationManager do
     GenServer.call(@name, :list_runners)
   end
 
+  def delete_conversation(name) do
+    GenServer.call(@name, {:delete, name})
+  catch
+    :exit, {:noproc, _} -> {:error, :service_unavailable}
+    :exit, {:nodedown, _} -> {:error, :service_unavailable}
+    :exit, {:timeout, _} -> {:error, :service_unavailable}
+  end
+
   def handle_call(message, from, %{conversations: :loading} = state) do
     Logger.warning(
       "Received call #{inspect(message)} from #{inspect(from)} while loading conversations. Retrying after delay."
@@ -113,6 +121,41 @@ defmodule ElixirAi.ConversationManager do
 
   def handle_call(:list_runners, _from, state) do
     {:reply, Map.get(state, :runners, %{}), state}
+  end
+
+  def handle_call({:delete, name}, _from, %{conversations: conversations} = state) do
+    if Map.has_key?(conversations, name) do
+      case Conversation.soft_delete(name) do
+        :ok ->
+          # Stop the runner if one is live
+          case Map.get(state.runners, name) do
+            %{pid: pid} ->
+              Horde.DynamicSupervisor.terminate_child(ElixirAi.ChatRunnerSupervisor, pid)
+
+            nil ->
+              :ok
+          end
+
+          Phoenix.PubSub.broadcast(
+            ElixirAi.PubSub,
+            conversations_topic(),
+            {:conversation_deleted, name}
+          )
+
+          new_state = %{
+            state
+            | conversations: Map.delete(conversations, name),
+              runners: Map.delete(state.runners, name)
+          }
+
+          {:reply, :ok, new_state}
+
+        {:error, _} = error ->
+          {:reply, error, state}
+      end
+    else
+      {:reply, {:error, :not_found}, state}
+    end
   end
 
   def handle_info({:DOWN, _ref, :process, pid, reason}, %{runners: runners} = state) do

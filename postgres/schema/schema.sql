@@ -30,11 +30,10 @@ CREATE TABLE IF NOT EXISTS conversations (
   allowed_tools  JSONB       NOT NULL DEFAULT '[]',
   tool_choice    TEXT        NOT NULL DEFAULT 'auto' CHECK (tool_choice IN ('auto', 'none', 'required')),
   stopped        BOOLEAN     NOT NULL DEFAULT FALSE,
+  deleted_at     TIMESTAMPTZ,
   inserted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS stopped BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS text_messages (
   id                 BIGSERIAL   PRIMARY KEY,
@@ -72,14 +71,6 @@ CREATE TABLE IF NOT EXISTS tool_response_messages (
   content            TEXT        NOT NULL,
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_text_messages_conversation   ON text_messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_text_messages_prev           ON text_messages(prev_message_id);
-CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_prev          ON tool_calls_request_messages(prev_message_id);
-CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_text_msg      ON tool_calls_request_messages(text_message_id);
-CREATE INDEX IF NOT EXISTS idx_tool_call_msgs_tool_call_id  ON tool_calls_request_messages(tool_call_id);
-CREATE INDEX IF NOT EXISTS idx_tool_response_msgs_prev      ON tool_response_messages(prev_message_id);
-CREATE INDEX IF NOT EXISTS idx_ai_provider_capabilities_provider ON ai_provider_capabilities(ai_provider_id);
 
 CREATE TABLE IF NOT EXISTS mcp_servers (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

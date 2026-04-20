@@ -21,6 +21,11 @@ func exitWithError(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
+// isHelpFlag returns true if the argument is a help flag.
+func isHelpFlag(arg string) bool {
+	return arg == "--help" || arg == "-h" || arg == "help"
+}
+
 // parseKeyValueArgs converts a list of "key=value" strings into a map.
 // Values are auto-typed: integers, floats, and booleans are preserved
 // as their native types; everything else becomes a string.

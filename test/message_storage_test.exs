@@ -66,16 +66,13 @@ defmodule ElixirAi.MessageStorageTest do
   test "run_sql is called with user message params" do
     conv_name = setup_conversation()
 
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
-      :ok
-    end)
-
     stub(ElixirAi.ChatUtils, :request_ai_response, fn _server,
                                                       _messages,
                                                       _tools,
                                                       _provider,
-                                                      _tool_choice ->
-      :ok
+                                                      _tool_choice,
+                                                      _response_format ->
+      {:ok, self()}
     end)
 
     ElixirAi.ChatRunner.new_user_message(conv_name, "hello world")
@@ -88,24 +85,17 @@ defmodule ElixirAi.MessageStorageTest do
   test "run_sql is called with assistant message params" do
     conv_name = setup_conversation()
 
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn server, _messages, _tools, _provider ->
-      id = make_ref()
-      send(server, {:stream, {:start_new_ai_response, id}})
-      send(server, {:stream, {:ai_text_chunk, id, "Hello from AI"}})
-      send(server, {:stream, {:ai_text_stream_finish, id}})
-      :ok
-    end)
-
     stub(ElixirAi.ChatUtils, :request_ai_response, fn server,
                                                       _messages,
                                                       _tools,
                                                       _provider,
-                                                      _tool_choice ->
+                                                      _tool_choice,
+                                                      _response_format ->
       id = make_ref()
       send(server, {:stream, {:start_new_ai_response, id}})
       send(server, {:stream, {:ai_text_chunk, id, "Hello from AI"}})
       send(server, {:stream, {:ai_text_stream_finish, id}})
-      :ok
+      {:ok, self()}
     end)
 
     ElixirAi.ChatRunner.new_user_message(conv_name, "hi")
@@ -124,33 +114,30 @@ defmodule ElixirAi.MessageStorageTest do
                                                         _messages,
                                                         _tools,
                                                         _provider,
-                                                        _tool_choice ->
+                                                        _tool_choice,
+                                                        _response_format ->
       id = make_ref()
       send(server, {:stream, {:start_new_ai_response, id}})
 
       send(
         server,
-        {:stream,
-         {:ai_tool_call_start, id, {"store_thing", ~s({"name":"k","value":"v"}), 0, "tc_1"}}}
+        {:stream, {:ai_tool_call_start, id, {"list_conversations", "{}", 0, "tc_1"}}}
       )
 
       send(server, {:stream, {:ai_tool_call_end, id}})
-      :ok
-    end)
-
-    stub(ElixirAi.ChatUtils, :request_ai_response, fn _server, _messages, _tools, _provider ->
-      :ok
+      {:ok, self()}
     end)
 
     stub(ElixirAi.ChatUtils, :request_ai_response, fn _server,
                                                       _messages,
                                                       _tools,
                                                       _provider,
-                                                      _tool_choice ->
-      :ok
+                                                      _tool_choice,
+                                                      _response_format ->
+      {:ok, self()}
     end)
 
-    ElixirAi.ChatRunner.new_user_message(conv_name, "store something")
+    ElixirAi.ChatRunner.new_user_message(conv_name, "list conversations")
 
     assert_receive {:insert_message, %{"role" => "user"}}, 2000
 
@@ -160,7 +147,7 @@ defmodule ElixirAi.MessageStorageTest do
 
     # Tool call details stored separately
     assert_receive {:insert_tool_call, params}, 2000
-    assert params["tool_name"] == "store_thing"
+    assert params["tool_name"] == "list_conversations"
     assert params["tool_call_id"] == "tc_1"
 
     # Tool result stored in tool_responses table

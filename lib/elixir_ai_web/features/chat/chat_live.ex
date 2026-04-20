@@ -49,6 +49,7 @@ defmodule ElixirAiWeb.ChatLive do
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, mcp_topic())
+          Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversations_topic())
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
           ChatRunner.register_liveview_pid_direct(pid, self())
           send(self(), :load_conversation)
@@ -378,6 +379,14 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_info({:mcp_tools_updated, _tools}, socket) do
     send_update(ElixirAiWeb.ChatToolsLive, id: "chat-tools", mcp_tools_updated: true)
     {:noreply, socket}
+  end
+
+  def handle_info({:conversation_deleted, name}, socket) do
+    if name == socket.assigns.conversation_name do
+      {:noreply, push_navigate(socket, to: ~p"/")}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:set_background_color, color}, socket) do
