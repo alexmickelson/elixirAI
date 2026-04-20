@@ -5,7 +5,6 @@ services:
       POSTGRES_USER: elixir_ai
       POSTGRES_PASSWORD: elixir_ai
       POSTGRES_DB: elixir_ai_dev
-
     command: postgres -c hba_file=/etc/postgresql/pg_hba.conf
     volumes:
       - ./postgres/schema/:/docker-entrypoint-initdb.d/
@@ -52,7 +51,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      command_runner:
+      llm_sandbox:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
@@ -101,10 +100,10 @@ services:
       timeout: 5s
       retries: 5
 
-  command_runner:
-    image: docker.io/alexmickelson/ai-sandbox-container:3
-    container_name: command_runner
-    hostname: command_runner
+  llm_sandbox:
+    image: docker.io/alexmickelson/ai-sandbox-container:4
+    container_name: llm_sandbox
+    hostname: llm_sandbox
     volumes:
       - sandbox_home:/home/sandbox
       - ./sandbox/mcp-servers.json:/etc/mcp/mcp-servers.json:ro
@@ -125,8 +124,8 @@ services:
       MCP_HTTP_PORT: "3000"
       MCP_HTTP_HARDEN: "true"
       MCP_HTTP_AUTH_TOKEN: ${MCP_HTTP_AUTH_TOKEN}
-      MCP_HTTP_ALLOWED_ORIGINS: "http://node1:4000,http://node2:4000,http://command_runner"
-      MCP_HTTP_ALLOWED_HOSTS: "mcp-searxng,mcp-searxng:3000,command_runner"
+      MCP_HTTP_ALLOWED_ORIGINS: "http://node1:4000,http://node2:4000,http://llm_sandbox"
+      MCP_HTTP_ALLOWED_HOSTS: "mcp-searxng,mcp-searxng:3000,llm_sandbox"
       MCP_HTTP_ALLOW_PRIVATE_URLS: "true"
     restart: unless-stopped
     healthcheck:

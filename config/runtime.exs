@@ -9,7 +9,7 @@ config :elixir_ai,
   ai_token: System.get_env("AI_TOKEN"),
   ai_model: System.get_env("AI_MODEL"),
   whisper_endpoint: System.get_env("WHISPER_ENDPOINT"),
-  sandbox_container: System.get_env("SANDBOX_CONTAINER") || "command_runner"
+  sandbox_container: System.get_env("SANDBOX_CONTAINER") || "llm_sandbox"
 
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the

@@ -157,6 +157,6 @@ defmodule ElixirAi.CommandRunner do
   end
 
   defp container_name do
-    Application.get_env(:elixir_ai, :sandbox_container) || "command_runner"
+    Application.get_env(:elixir_ai, :sandbox_container) || "llm_sandbox"
   end
 end

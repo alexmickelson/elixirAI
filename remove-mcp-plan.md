@@ -90,7 +90,7 @@ Remove the `mcp_server_manager_child_spec/0` private function definition.
 
 ### `docker-compose.yml`
 - Keep the `mcp-searxng` service — the sandbox connects to it directly
-- Keep `command_runner` volume mount for `mcp-servers.json`
+- Keep `llm_sandbox` volume mount for `mcp-servers.json`
 - No changes needed here
 
 ## Post-Removal Steps
