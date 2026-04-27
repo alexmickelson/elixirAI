@@ -3,16 +3,6 @@ defmodule ElixirAiWeb.ChatToolsLive do
   import ElixirAiWeb.FormComponents
   alias ElixirAi.{AiTools, ChatRunner}
 
-  def update(%{mcp_tools_updated: true} = assigns, socket) do
-    all = AiTools.all_tool_names()
-    grouped = group_tools(all)
-
-    {:ok,
-     socket
-     |> assign(assigns)
-     |> assign(all_tools: all, tool_groups: grouped)}
-  end
-
   def update(assigns, socket) do
     {:ok,
      socket
@@ -120,31 +110,9 @@ defmodule ElixirAiWeb.ChatToolsLive do
 
   defp get_allowed_tools(_), do: nil
 
-  # Groups tool names into [{label, [tool_names]}] for sectioned display.
-  # Built-in tools go under "Built-in", MCP tools grouped by server name.
   defp group_tools(all_tools) do
-    {builtin, mcp} = Enum.split_with(all_tools, &(not String.starts_with?(&1, "mcp:")))
-
-    mcp_groups =
-      mcp
-      |> Enum.group_by(fn name ->
-        case String.split(name, ":", parts: 3) do
-          ["mcp", server, _tool] -> server
-          _ -> "mcp"
-        end
-      end)
-      |> Enum.sort_by(&elem(&1, 0))
-      |> Enum.map(fn {server, tools} -> {"MCP: #{server}", tools} end)
-
-    [{"Built-in", builtin} | mcp_groups]
-    |> Enum.reject(fn {_, tools} -> tools == [] end)
+    [{"Built-in", all_tools}]
   end
 
-  # Strips the "mcp:server:" prefix for cleaner display in the toggle list.
-  defp display_tool_name(name) do
-    case String.split(name, ":", parts: 3) do
-      ["mcp", _server, tool_name] -> tool_name
-      _ -> name
-    end
-  end
+  defp display_tool_name(name), do: name
 end

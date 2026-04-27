@@ -62,8 +62,7 @@ defmodule ElixirAi.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mimic, "~> 2.3.0"},
       {:zoi, "~> 0.17"},
-      {:yaml_elixir, "~> 2.12"},
-      {:anubis_mcp, "~> 1.1"}
+      {:yaml_elixir, "~> 2.12"}
     ]
   end
 

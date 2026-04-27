@@ -1,14 +1,13 @@
 defmodule ElixirAiWeb.HomeLive do
   use ElixirAiWeb, :live_view
   import ElixirAiWeb.FormComponents
-  alias ElixirAi.{ConversationManager, AiProvider, McpServer}
+  alias ElixirAi.{ConversationManager, AiProvider}
   require Logger
   import ElixirAi.PubsubTopics
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(ElixirAi.PubSub, providers_topic())
-      Phoenix.PubSub.subscribe(ElixirAi.PubSub, mcp_topic())
       Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversations_topic())
       :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
       send(self(), :load_data)
@@ -18,7 +17,6 @@ defmodule ElixirAiWeb.HomeLive do
      socket
      |> assign(conversations: [])
      |> assign(ai_providers: [])
-     |> assign(mcp_servers: [])
      |> assign(new_name: "")
      |> assign(confirm_delete_name: nil)
      |> assign(error: nil)}
@@ -44,14 +42,6 @@ defmodule ElixirAiWeb.HomeLive do
           module={ElixirAiWeb.AiProvidersLive}
           id="ai-providers"
           providers={@ai_providers}
-        />
-      </div>
-
-      <div>
-        <.live_component
-          module={ElixirAiWeb.McpServersLive}
-          id="mcp-servers"
-          mcp_servers={@mcp_servers}
         />
       </div>
     </div>
@@ -217,8 +207,7 @@ defmodule ElixirAiWeb.HomeLive do
     {:noreply,
      socket
      |> assign(conversations: conversations)
-     |> assign(ai_providers: ai_providers)
-     |> assign(mcp_servers: McpServer.all())}
+     |> assign(ai_providers: ai_providers)}
   end
 
   def handle_info({:provider_added, _attrs}, socket) do
@@ -231,22 +220,6 @@ defmodule ElixirAiWeb.HomeLive do
 
   def handle_info({:provider_deleted, _id}, socket) do
     {:noreply, assign(socket, ai_providers: AiProvider.all())}
-  end
-
-  def handle_info({:mcp_server_added, _}, socket) do
-    {:noreply, assign(socket, mcp_servers: McpServer.all())}
-  end
-
-  def handle_info({:mcp_server_deleted, _}, socket) do
-    {:noreply, assign(socket, mcp_servers: McpServer.all())}
-  end
-
-  def handle_info({:mcp_server_updated, _, _}, socket) do
-    {:noreply, assign(socket, mcp_servers: McpServer.all())}
-  end
-
-  def handle_info({:mcp_tools_updated, _tools}, socket) do
-    {:noreply, assign(socket, mcp_servers: McpServer.all())}
   end
 
   def handle_info({:conversation_deleted, name}, socket) do

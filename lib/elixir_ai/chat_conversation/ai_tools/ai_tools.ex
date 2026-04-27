@@ -23,10 +23,8 @@ defmodule ElixirAi.AiTools do
   @doc "Built-in tool names (server + liveview, no MCP)."
   def builtin_tool_names, do: @builtin_tool_names
 
-  @doc "All tool names including dynamically discovered MCP tools."
-  def all_tool_names do
-    @builtin_tool_names ++ ElixirAi.Mcp.McpToolAdapter.all_mcp_tool_names()
-  end
+  @doc "All tool names (server + liveview built-ins)."
+  def all_tool_names, do: @builtin_tool_names
 
   def build_server_tools(server, allowed_names) do
     [list_conversations(server), run(server)]
@@ -38,15 +36,10 @@ defmodule ElixirAi.AiTools do
     |> Enum.filter(&(&1.name in allowed_names))
   end
 
-  def build_mcp_tools(server, allowed_names) do
-    ElixirAi.Mcp.McpToolAdapter.build_allowed_mcp_tools(server, allowed_names)
-  end
-
-  @doc "Convenience wrapper — builds all allowed tools (server + liveview + mcp)."
+  @doc "Convenience wrapper — builds all allowed tools (server + liveview)."
   def build(server, allowed_names) do
     build_server_tools(server, allowed_names) ++
-      build_liveview_tools(server, allowed_names) ++
-      build_mcp_tools(server, allowed_names)
+      build_liveview_tools(server, allowed_names)
   end
 
   def recover_run_tool_call(server, tool_call_id, command) do

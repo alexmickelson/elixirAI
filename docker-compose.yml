@@ -46,8 +46,6 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "4001:4000"
     depends_on:
       db:
         condition: service_healthy
@@ -89,8 +87,6 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "4002:4000"
     depends_on:
       db:
         condition: service_healthy

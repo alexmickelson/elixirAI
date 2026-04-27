@@ -72,12 +72,3 @@ CREATE TABLE IF NOT EXISTS tool_response_messages (
   inserted_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS mcp_servers (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT        NOT NULL UNIQUE,
-  url         TEXT        NOT NULL,
-  headers     JSONB       NOT NULL DEFAULT '{}',
-  enabled     BOOLEAN     NOT NULL DEFAULT TRUE,
-  inserted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);

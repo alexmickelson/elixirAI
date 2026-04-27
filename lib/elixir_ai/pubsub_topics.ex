@@ -4,5 +4,4 @@ defmodule ElixirAi.PubsubTopics do
   def providers_topic, do: "providers"
   def conversations_topic, do: "conversations"
   def admin_topic, do: "admin"
-  def mcp_topic, do: "mcp_servers"
 end

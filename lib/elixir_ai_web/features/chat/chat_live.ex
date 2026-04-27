@@ -48,7 +48,6 @@ defmodule ElixirAiWeb.ChatLive do
       {:ok, %{runner_pid: pid}} ->
         if connected?(socket) do
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, chat_topic(name))
-          Phoenix.PubSub.subscribe(ElixirAi.PubSub, mcp_topic())
           Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversations_topic())
           :pg.join(ElixirAi.LiveViewPG, {:liveview, __MODULE__}, self())
           ChatRunner.register_liveview_pid_direct(pid, self())
@@ -373,11 +372,6 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info({:liveview_tool_call, _tool_name, _args}, socket) do
-    {:noreply, socket}
-  end
-
-  def handle_info({:mcp_tools_updated, _tools}, socket) do
-    send_update(ElixirAiWeb.ChatToolsLive, id: "chat-tools", mcp_tools_updated: true)
     {:noreply, socket}
   end
 
