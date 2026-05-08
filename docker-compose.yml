@@ -97,7 +97,7 @@ services:
       retries: 5
 
   llm_sandbox:
-    image: docker.io/alexmickelson/ai-sandbox-container:4
+    image: docker.io/alexmickelson/ai-sandbox-container:latest
     container_name: llm_sandbox
     hostname: llm_sandbox
     volumes:

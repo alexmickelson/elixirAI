@@ -434,7 +434,7 @@ defmodule ElixirAiWeb.ChatLive do
 
   defp runner_status_indicator(assigns) do
     ~H"""
-    <%= if @status not in [nil, :idle] do %>
+    <%= if @status not in [nil, :idle, :stopped] do %>
       <div class="absolute bottom-14 right-3 pointer-events-none select-none z-10">
         <div class={[
           "flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] backdrop-blur-sm border",
