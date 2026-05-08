@@ -3,7 +3,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   import ElixirAi.ChatRunner.OutboundHelpers
 
   defp all_tools(state) do
-    state.server_tools ++ state.liveview_tools ++ state.page_tools ++ state.mcp_tools
+    state.server_tools ++ state.liveview_tools ++ state.page_tools
   end
 
   def handle({:start_new_ai_response, id}, state) do

@@ -20,7 +20,7 @@ defmodule ElixirAi.AiTools do
 
   def liveview_tool_names, do: @liveview_tool_names
 
-  @doc "Built-in tool names (server + liveview, no MCP)."
+  @doc "Built-in tool names (server + liveview)."
   def builtin_tool_names, do: @builtin_tool_names
 
   @doc "All tool names (server + liveview built-ins)."
@@ -127,13 +127,7 @@ defmodule ElixirAi.AiTools do
           curl -sL $URL -o data.csv && head -5 data.csv
           cat config.yaml || echo "not found, using defaults"
 
-        MCP examples:
-          mcp-cli list
-          mcp-cli tools SERVER
-          mcp-cli tools SERVER TOOL key="value"
-          mcp-cli schema SERVER TOOL
-
-        Use --help for command details (e.g. "grep --help", "mcp-cli tools --help").
+        Use --help for command details (e.g. "grep --help").
         Large outputs are automatically truncated with a path to the full file.
         """,
         "parameters" => %{

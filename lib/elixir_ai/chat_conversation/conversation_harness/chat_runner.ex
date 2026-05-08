@@ -101,7 +101,6 @@ defmodule ElixirAi.ChatRunner do
 
   def init(name) do
     Phoenix.PubSub.subscribe(ElixirAi.PubSub, conversation_message_topic(name))
-    Phoenix.PubSub.subscribe(ElixirAi.PubSub, "mcp_servers")
     :pg.join(ElixirAi.RunnerPG, {:runner, name}, self())
 
     {:ok,
@@ -118,7 +117,6 @@ defmodule ElixirAi.ChatRunner do
        tool_choice: "auto",
        server_tools: [],
        liveview_tools: [],
-       mcp_tools: [],
        page_tools: [],
        provider: nil,
        response_format: nil,
@@ -179,20 +177,28 @@ defmodule ElixirAi.ChatRunner do
 
         resp
         when resp.content != "" or resp.reasoning_content != "" or resp.tool_calls != [] ->
-          # Strip in-progress tool calls — they were never completed and must not be persisted
-          if resp.content != "" or resp.reasoning_content != "" do
-            partial_message = %{
-              role: :assistant,
-              content: resp.content,
-              reasoning_content: resp.reasoning_content,
-              tool_calls: [],
-              interrupted: true
-            }
+          cond do
+            resp.content != "" ->
+              # Has actual content — store the partial message
+              partial_message = %{
+                role: :assistant,
+                content: resp.content,
+                reasoning_content: resp.reasoning_content,
+                tool_calls: [],
+                interrupted: true
+              }
 
-            store_message(state.conversation_id, state.name, partial_message)
-            {state.messages ++ [partial_message], {:stopped, partial_message}}
-          else
-            {state.messages, :stopped}
+              store_message(state.conversation_id, state.name, partial_message)
+              {state.messages ++ [partial_message], {:stopped, partial_message}}
+
+            resp.reasoning_content != "" ->
+              # Stopped mid-reasoning with no actual content — discard the partial
+              # reasoning block; it cannot be used as an assistant prefill and would
+              # cause "incompatible with enable thinking" errors on the next turn.
+              {state.messages, :stopped}
+
+            true ->
+              {state.messages, :stopped}
           end
 
         _ ->
@@ -271,12 +277,6 @@ defmodule ElixirAi.ChatRunner do
 
   def handle_info({:DOWN, ref, :process, pid, reason}, state),
     do: LiveviewSession.handle_down(ref, pid, reason, state)
-
-  # MCP tools changed — rebuild mcp_tools for this conversation
-  def handle_info({:mcp_tools_updated, _tools}, state) do
-    mcp_tools = AiTools.build_mcp_tools(self(), state.allowed_tools)
-    {:noreply, %{state | mcp_tools: mcp_tools}}
-  end
 
   def handle_call({:conversation, inner}, from, state),
     do: ConversationCalls.handle_call(inner, from, state)

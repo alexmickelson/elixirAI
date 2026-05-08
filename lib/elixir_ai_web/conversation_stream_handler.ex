@@ -203,6 +203,10 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
      |> assign(streaming_response: nil)}
   end
 
+  def handle(:remove_last_message, socket) do
+    {:noreply, update(socket, :messages, &List.delete_at(&1, -1))}
+  end
+
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------

@@ -101,7 +101,7 @@ services:
     container_name: llm_sandbox
     hostname: llm_sandbox
     volumes:
-      - sandbox_home:/home/sandbox
+      - ./agent_sandbox:/home/sandbox
       - ./sandbox/mcp-servers.json:/etc/mcp/mcp-servers.json:ro
     healthcheck:
       test: ["CMD", "echo", "ok"]
@@ -139,6 +139,3 @@ services:
     depends_on:
       - node1
       - node2
-
-volumes:
-  sandbox_home:

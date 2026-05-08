@@ -250,6 +250,38 @@ defmodule ElixirAi.Message do
     end
   end
 
+  # Deletes the most recent assistant text_message for the conversation that has
+  # reasoning_content but no actual content — i.e. was stopped mid-reasoning.
+  # Returns :ok on success (including when no such row exists), :error otherwise.
+  def delete_last_reasoning_only_message(conversation_id, topic: topic)
+      when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
+    sql = """
+    DELETE FROM text_messages
+    WHERE id = (
+      SELECT id FROM text_messages
+      WHERE conversation_id = $(conversation_id)
+        AND role = 'assistant'
+        AND (content IS NULL OR content = '')
+        AND reasoning_content IS NOT NULL
+        AND reasoning_content != ''
+      ORDER BY inserted_at DESC
+      LIMIT 1
+    )
+    """
+
+    case DbHelpers.run_sql(sql, %{"conversation_id" => conversation_id}, topic) do
+      {:error, _} -> :error
+      _ -> :ok
+    end
+  end
+
+  def delete_last_reasoning_only_message(conversation_id, topic: topic) do
+    case dump_uuid(conversation_id) do
+      {:ok, db_id} -> delete_last_reasoning_only_message(db_id, topic: topic)
+      :error -> :error
+    end
+  end
+
   def update_approval_decision(tool_call_id, decision, opts) do
     topic = Keyword.fetch!(opts, :topic)
     justification = Keyword.get(opts, :justification)

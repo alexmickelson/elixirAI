@@ -17,3 +17,5 @@ elixir_ls/
 *.tmp
 providers.yml
 sandbox/mcp-servers.json
+
+agent_sandbox/
