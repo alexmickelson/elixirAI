@@ -129,6 +129,9 @@ defmodule ElixirAi.AiTools do
 
         Use --help for command details (e.g. "grep --help").
         Large outputs are automatically truncated with a path to the full file.
+
+        You can find details about your environment at /home/sandbox/.agents/skills/environment/SKILL.md
+        Skills and other information will be in the /home/sandbox/.agents/skills folder
         """,
         "parameters" => %{
           "type" => "object",

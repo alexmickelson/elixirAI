@@ -81,7 +81,7 @@ button {
 
 /* Reasoning content collapse animation */
 .reasoning-content {
-  @apply overflow-hidden opacity-100 max-h-[1000px] [transition:max-height_0.35s_ease,opacity_0.25s_ease,padding_0.25s_ease,margin_0.25s_ease];
+  @apply overflow-hidden opacity-100 max-h-none [transition:opacity_0.25s_ease,padding_0.25s_ease,margin_0.25s_ease];
 }
 .reasoning-content.collapsed {
   @apply opacity-0 max-h-0 pt-0 pb-0 mb-0;

@@ -29,3 +29,6 @@ process groups for distributing workers across cluster: <https://memo.d.foundati
 
 
 zoi validation library: <https://elixirforum.com/t/zoi-schema-validation-library-inspired-by-zod/72108/17>
+
+
+https://github.com/sheeki03/tirith - helps with cli validation

@@ -25,6 +25,119 @@ let Hooks = {};
 
 Hooks.VoiceControl = VoiceControl;
 
+// Inline mic recorder for the chat input.
+// Click-to-start, click-to-stop. On stop, pushes audio_recorded to the LiveView.
+Hooks.ChatVoiceRecord = {
+  mounted() {
+    this._mediaRecorder = null;
+    this._chunks = [];
+    this._recording = false;
+    this._audioCtx = null;
+    this._analyser = null;
+    this._animFrame = null;
+    this._stream = null;
+
+    this.el.addEventListener("chat-voice:start", () => this.startRecording());
+    this.el.addEventListener("chat-voice:stop", () => this.stopRecording());
+  },
+
+  destroyed() {
+    this._stopVisualization();
+    if (this._stream) this._stream.getTracks().forEach((t) => t.stop());
+  },
+
+  async startRecording() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      this.pushEvent("recording_error", { reason: err.message });
+      return;
+    }
+
+    this._stream = stream;
+    this._chunks = [];
+    this._mediaRecorder = new MediaRecorder(stream);
+
+    this._mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) this._chunks.push(e.data);
+    };
+
+    this._mediaRecorder.onstop = () => {
+      const mimeType = this._mediaRecorder.mimeType;
+      const blob = new Blob(this._chunks, { type: mimeType });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result.split(",")[1];
+        this.pushEvent("chat_audio_recorded", {
+          data: base64,
+          mime_type: mimeType,
+        });
+      };
+      reader.readAsDataURL(blob);
+      stream.getTracks().forEach((t) => t.stop());
+      this._stopVisualization();
+      this._recording = false;
+    };
+
+    this._mediaRecorder.start();
+    this._recording = true;
+    this.pushEvent("chat_recording_started", {});
+    setTimeout(() => this._startVisualization(stream), 50);
+  },
+
+  stopRecording() {
+    if (this._mediaRecorder && this._mediaRecorder.state !== "inactive") {
+      this._mediaRecorder.stop();
+    }
+  },
+
+  _startVisualization(stream) {
+    this._audioCtx = new AudioContext();
+    this._analyser = this._audioCtx.createAnalyser();
+    this._analyser.fftSize = 64;
+    this._analyser.smoothingTimeConstant = 0.75;
+    const source = this._audioCtx.createMediaStreamSource(stream);
+    source.connect(this._analyser);
+    const bufferLength = this._analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      this._animFrame = requestAnimationFrame(draw);
+      const canvas = this.el.querySelector(".chat-voice-canvas");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (canvas.width !== canvas.offsetWidth)
+        canvas.width = canvas.offsetWidth;
+      if (canvas.height !== canvas.offsetHeight)
+        canvas.height = canvas.offsetHeight;
+      this._analyser.getByteFrequencyData(dataArray);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barWidth = (canvas.width / bufferLength) * 0.7;
+      const gap = canvas.width / bufferLength - barWidth;
+      for (let i = 0; i < bufferLength; i++) {
+        const value = dataArray[i] / 255;
+        const barHeight = Math.max(2, value * canvas.height);
+        const x = i * (barWidth + gap) + gap / 2;
+        const y = canvas.height - barHeight;
+        const hue = 185 - value * 80;
+        const lightness = 40 + value * 25;
+        ctx.fillStyle = `hsl(${hue}, 90%, ${lightness}%)`;
+        ctx.fillRect(x, y, barWidth, barHeight);
+      }
+    };
+    draw();
+  },
+
+  _stopVisualization() {
+    if (this._animFrame) cancelAnimationFrame(this._animFrame);
+    if (this._audioCtx) {
+      this._audioCtx.close();
+      this._audioCtx = null;
+    }
+  },
+};
+
 // Renders a complete markdown string client-side on mount.
 // The raw markdown is passed as the data-md attribute.
 Hooks.MarkdownRender = {

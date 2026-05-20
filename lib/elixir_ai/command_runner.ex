@@ -29,7 +29,7 @@ defmodule ElixirAi.CommandRunner do
     wrapped =
       "{\n#{shell_command}\n} 2>&1"
 
-    docker_args = ["exec", container, "bash", "-c", wrapped]
+    docker_args = ["exec", "-u", "1000", container, "bash", "-c", wrapped]
 
     Logger.info("CommandRunner (stream): #{container} $ #{shell_command}")
 
@@ -95,7 +95,7 @@ defmodule ElixirAi.CommandRunner do
         "fi\n" <>
         "exit $__exit"
 
-    docker_args = ["exec", container, "bash", "-c", wrapped]
+    docker_args = ["exec", "-u", "1000", container, "bash", "-c", wrapped]
 
     Logger.info("CommandRunner: #{container} $ #{shell_command}")
 
@@ -120,7 +120,7 @@ defmodule ElixirAi.CommandRunner do
   """
   def execute(command, args \\ []) when is_binary(command) and is_list(args) do
     container = container_name()
-    docker_args = ["exec", container, command | args]
+    docker_args = ["exec", "-u", "1000", container, command | args]
 
     start_time = System.monotonic_time(:millisecond)
 

@@ -67,7 +67,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
          |> assign(ai_error: nil)
-         |> assign(runner_status: nil)}
+         |> assign(runner_status: nil)
+         |> assign(recording: :idle)}
 
       {:error, :not_found} ->
         {:ok, push_navigate(socket, to: "/")}
@@ -89,7 +90,8 @@ defmodule ElixirAiWeb.ChatLive do
              "The conversation service is not available. Please wait a moment and refresh."
          )
          |> assign(ai_error: nil)
-         |> assign(runner_status: nil)}
+         |> assign(runner_status: nil)
+         |> assign(recording: :idle)}
 
       {:error, reason} ->
         Logger.error("Failed to start conversation #{name}: #{inspect(reason)}")
@@ -107,7 +109,8 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
          |> assign(ai_error: nil)
-         |> assign(runner_status: nil)}
+         |> assign(runner_status: nil)
+         |> assign(recording: :idle)}
     end
   end
 
@@ -214,6 +217,61 @@ defmodule ElixirAiWeb.ChatLive do
           value={@user_input}
           class="flex-1 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2"
         />
+        <div id="chat-voice-record" phx-hook="ChatVoiceRecord">
+          <%= if @recording == :recording do %>
+            <div class="flex items-center gap-2">
+              <canvas
+                class="chat-voice-canvas rounded bg-seafoam-950"
+                height="36"
+                style="width: 80px;"
+              >
+              </canvas>
+              <button
+                type="button"
+                phx-click={Phoenix.LiveView.JS.dispatch("chat-voice:stop", to: "#chat-voice-record")}
+                class="px-3 py-2 rounded text-sm border border-red-800/50 text-red-400 hover:bg-red-950/40 transition-colors"
+              >
+                <span class="relative flex h-2 w-2 inline-block mr-1">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75">
+                  </span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                Stop
+              </button>
+            </div>
+          <% else %>
+            <button
+              type="button"
+              disabled={@recording == :processing}
+              phx-click={Phoenix.LiveView.JS.dispatch("chat-voice:start", to: "#chat-voice-record")}
+              class={[
+                "px-3 py-2 rounded text-sm border transition-colors",
+                if(@recording == :processing,
+                  do: "border-seafoam-800/40 text-seafoam-600 cursor-wait",
+                  else: "border-seafoam-700/50 text-seafoam-400 hover:bg-seafoam-900/40"
+                )
+              ]}
+              title={if(@recording == :processing, do: "Transcribing…", else: "Record voice")}
+            >
+              <%= if @recording == :processing do %>
+                <span class="relative flex h-4 w-4">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-seafoam-400 opacity-75">
+                  </span>
+                  <span class="relative inline-flex rounded-full h-4 w-4 bg-seafoam-400"></span>
+                </span>
+              <% else %>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm0 2a2 2 0 0 0-2 2v7a2 2 0 1 0 4 0V5a2 2 0 0 0-2-2zm-7 9a7 7 0 0 0 14 0h2a9 9 0 0 1-8 8.94V23h-2v-2.06A9 9 0 0 1 3 12H5z" />
+                </svg>
+              <% end %>
+            </button>
+          <% end %>
+        </div>
         <.live_component
           module={ElixirAiWeb.ChatToolsLive}
           id="chat-tools"
@@ -229,17 +287,19 @@ defmodule ElixirAiWeb.ChatLive do
             Stop
           </button>
         <% else %>
-          <%= if @user_input == "" do %>
-            <button
-              type="submit"
-              class="px-4 py-2 rounded text-sm border border-blue-800/50 text-blue-400 hover:bg-blue-950/40 transition-colors"
-            >
-              AI Turn
-            </button>
-          <% else %>
-            <button type="submit" class="px-4 py-2 rounded text-sm border">
-              Send
-            </button>
+          <%= if @recording != :recording do %>
+            <%= if @user_input == ""  do %>
+              <button
+                type="submit"
+                class="px-4 py-2 rounded text-sm border border-blue-800/50 text-blue-400 hover:bg-blue-950/40 transition-colors"
+              >
+                AI Turn
+              </button>
+            <% else %>
+              <button type="submit" class="px-4 py-2 rounded text-sm border">
+                Send
+              </button>
+            <% end %>
           <% end %>
         <% end %>
       </form>
@@ -280,6 +340,25 @@ defmodule ElixirAiWeb.ChatLive do
   def handle_event("stop_conversation", _params, socket) do
     ChatRunner.stop_conversation(socket.assigns.conversation_name)
     {:noreply, socket}
+  end
+
+  def handle_event("chat_recording_started", _params, socket) do
+    {:noreply, assign(socket, recording: :recording)}
+  end
+
+  def handle_event("chat_audio_recorded", %{"data" => base64, "mime_type" => mime_type}, socket) do
+    case Base.decode64(base64) do
+      {:ok, audio_binary} ->
+        ElixirAi.AudioProcessing.submit(audio_binary, mime_type, self())
+        {:noreply, assign(socket, recording: :processing)}
+
+      :error ->
+        {:noreply, assign(socket, recording: :idle)}
+    end
+  end
+
+  def handle_event("recording_error", _params, socket) do
+    {:noreply, assign(socket, recording: :idle)}
   end
 
   def handle_event("approve_command", %{"ref" => ref_string}, socket) do
@@ -362,6 +441,14 @@ defmodule ElixirAiWeb.ChatLive do
   end
 
   def handle_info(:sync_streaming, socket), do: {:noreply, socket}
+
+  def handle_info({:transcription_result, {:ok, text}}, socket) do
+    {:noreply, assign(socket, user_input: text, recording: :idle)}
+  end
+
+  def handle_info({:transcription_result, {:error, _reason}}, socket) do
+    {:noreply, assign(socket, recording: :idle)}
+  end
 
   def handle_info({:liveview_tool_call, "set_background_color", %{"color" => color}}, socket) do
     {:noreply, assign(socket, background_color: color)}

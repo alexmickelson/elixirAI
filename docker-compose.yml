@@ -97,12 +97,15 @@ services:
       retries: 5
 
   llm_sandbox:
-    image: docker.io/alexmickelson/ai-sandbox-container:latest
+    # image: docker.io/alexmickelson/ai-sandbox-container:latest
+    build:
+      context: sandbox/
     container_name: llm_sandbox
     hostname: llm_sandbox
+    user: root
     volumes:
       - ./agent_sandbox:/home/sandbox
-      - ./sandbox/mcp-servers.json:/etc/mcp/mcp-servers.json:ro
+      - nix_store:/nix
     healthcheck:
       test: ["CMD", "echo", "ok"]
       interval: 10s
@@ -139,3 +142,6 @@ services:
     depends_on:
       - node1
       - node2
+
+volumes:
+  nix_store:
