@@ -41,6 +41,10 @@ RUN mkdir -p /home/sandbox/.config/nix /home/sandbox/.config/nixpkgs /home/sandb
 COPY environment-skill.md /home/sandbox/.agents/skills/environment/SKILL.md
 RUN chown sandbox:sandbox /home/sandbox/.agents/skills/environment/SKILL.md
 
+# Install .bashrc for the sandbox user before creating defaults backup
+COPY .bashrc /home/sandbox/.bashrc
+RUN chown sandbox:sandbox /home/sandbox/.bashrc
+
 # Backup home directory files so they can be restored after the volume mount wipes /home/sandbox
 RUN cp -a /home/sandbox/. /home/sandbox-defaults/
 
