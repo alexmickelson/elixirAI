@@ -18,6 +18,13 @@ spec:
     metadata:
       labels:
         app: ai-ha-elixir
+      annotations:
+        # Exclude Erlang distribution ports from Istio Envoy sidecar interception.
+        # Erlang's native dist protocol is a custom binary protocol that is NOT
+        # compatible with Envoy's mTLS termination — if intercepted, clustering
+        # will fail silently or corrupt heartbeats.
+        traffic.sidecar.istio.io/excludeInboundPorts: "4369,9000"
+        traffic.sidecar.istio.io/excludeOutboundPorts: "4369,9000"
     spec:
       containers:
         - name: ai-ha-elixir

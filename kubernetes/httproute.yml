@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ai-ha-elixir
+  namespace: ai-ha-elixir
+spec:
+  parentRefs:
+    # Reference an existing Gateway in the cluster.
+    # Replace with your Gateway's name and/or namespace if needed.
+    - name: "EXISTING_GATEWAY"
+  hostnames:
+    - "$INGRESS_HOST"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: ai-ha-elixir
+          port: 80
