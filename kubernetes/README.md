@@ -1,17 +1,17 @@
-# Kubernetes Deployment with Istio
+# Kubernetes Deployment with Gateway API
 
-This directory contains the Kubernetes manifests for deploying elixirAI with an **Istio service mesh**.
+This directory contains the Kubernetes manifests for deploying elixirAI using the **standard Kubernetes Gateway API** (`HTTPRoute`). The Erlang distribution ports are excluded from mesh sidecar interception so clustering remains healthy.
 
 ## Architecture
 
 ```
-                          ┌───────────────┐
-  $INGRESS_HOST ─────────▶│  Istio        │
-  (e.g. ai.example.com)   │  Gateway      │
+                         ┌───────────────┐
+  $INGRESS_HOST ─────────▶│   Gateway     │
+  (e.g. ai.example.com)   │ (standard)    │
                           └───────┬───────┘
                                   │ HTTP/80
                           ┌───────▼───────┐
-                          │ VirtualService│──→ retries, timeouts, outlier detection
+                          │   HTTPRoute   │──→ routes to ClusterIP service
                           └───────┬───────┘
                                   │
                     ┌─────────────┴─────────────┐
@@ -26,14 +26,20 @@ This directory contains the Kubernetes manifests for deploying elixirAI with an 
             │ ┌─────────┐ │ │ ┌───────┐│        │
             │ │ Elixir  │ │ │ │Elixir ││        │
             │ │ :4000   │ │ │ │:4000  ││        │
-            │ │ Envoy↕️ │ │ │ │Envoy↕️││        │
-            │ └─────────┘ │ │ └───────┘│        │
-            │ :4369 EPMD  │ │ :4369    │        │ ← excluded from Envoy
-            │ :9000 BEAM  │ │ :9000    │        │ ← excluded from Envoy
+            │ │ Envoy   │ │ │ │Envoy  ││        │
+            └─────────┘ │ │ └───────┘│        │
+            │ :4369 EPMD  │ │ :4369    │        ← excluded from Envoy
+            │ :9000 BEAM  │ │ :9000    │        ← excluded from Envoy
             └─────────────┘ └──────────┘
 ```
 
-## Istio-Specific Design Decisions
+## Gateway API Design Decisions
+
+### HTTPRoute Instead of Ingress or VirtualService
+External traffic enters through a standard Kubernetes **Gateway** → **HTTPRoute**
+chain. This is the portable, upstream-recommended approach that works with any
+Gateway API-compliant controller (Istio, GCE, AWS LB, nginx, etc.) without
+vendor-specific resources.
 
 ### Sidecar Injection
 The namespace `ai-ha-elixir` has the label `istio-injection: enabled`, so every
@@ -52,13 +58,6 @@ traffic.sidecar.istio.io/excludeOutboundPorts: "4369,9000"
 This means inter-node Erlang clustering bypasses the mesh (plaintext), while
 all HTTP traffic between pods and external ingress goes through Envoy with mTLS.
 
-### Gateway + VirtualService (no nginx Ingress)
-External traffic enters through an Istio `Gateway` → `VirtualService` chain,
-replacing the previous nginx `Ingress`. This gives you:
-- Automatic retries (3 attempts, 2s per-try timeout)
-- Overall request timeout (15s)
-- mTLS from edge to pod
-
 ## Files
 
 | File | Purpose |
@@ -66,39 +65,43 @@ replacing the previous nginx `Ingress`. This gives you:
 | `services.yml` | Namespace (with Istio injection), headless + ClusterIP services |
 | `statefulset.yml` | App pods with sidecar annotations and Erlang port exclusions |
 | `configmap.yml` | Runtime configuration for the Elixir nodes |
-| `gateway.yml` | Istio Gateway — terminates external HTTP traffic |
-| `virtualservice.yml` | Istio VirtualService — routes to app with resilience policies |
+| `httproute.yml` | HTTPRoute — routes external traffic to the app service via a standard Gateway API controller |
+| `ingress.yml` | Fallback nginx Ingress (for clusters without a Gateway API controller) |
 | `db.yml` | PostgreSQL deployment and service |
 
 ## Deployment
 
 ```bash
-# 1. Create namespace and all resources (namespace must come first for injection label)
+# 1. Ensure a Gateway resource exists in your cluster (or create one).
+#    The HTTPRoute references it by name — update httproute.yml accordingly.
+
+# 2. Create namespace and all resources (namespace must come first for injection label)
 kubectl apply -f kubernetes/services.yml
 kubectl apply -f kubernetes/configmap.yml
 kubectl apply -f kubernetes/db.yml
 kubectl apply -f kubernetes/statefulset.yml
-kubectl apply -f kubernetes/gateway.yml
-kubectl apply -f kubernetes/virtualservice.yml
+kubectl apply -f kubernetes/httproute.yml
 
 # Or in one shot (works because namespace is first in services.yml):
 kubectl apply -R -f kubernetes/
 
-# 2. Set secrets (SECRET_KEY_BASE and AI_TOKEN)
+# 3. Set secrets (SECRET_KEY_BASE and AI_TOKEN)
 kubectl create secret generic ai-ha-elixir-secrets \
   --from-literal=SECRET_KEY_BASE=$(openssl rand -base64 64) \
   --from-literal=AI_TOKEN="your-token" \
   -n ai-ha-elixir
 
-# 3. Verify pods + sidecars have 2 containers each
+# 4. Verify pods + sidecars have 2 containers each
 kubectl get pods -n ai-ha-elixir
 kubectl describe pod <pod-name> -n ai-ha-elixir | grep "Containers:"
 ```
 
 ## Migration Notes (from nginx Ingress)
 
-- The old `ingress.yml` has been removed. If your cluster does not use Istio,
-  you can revert to it or create a standard nginx Ingress referencing the same
-  service (`ai-ha-elixir`, port 80).
+- The old `ingress.yml` is retained as a **fallback** for clusters without a
+  Gateway API controller. Use `httproute.yml` by default when available.
 - Set `$INGRESS_HOST` consistently in both `configmap.yml` (PHX_HOST) and the
-  Gateway/VirtualService before applying.
+  HTTPRoute before applying.
+- Ensure your cluster has a **Gateway** resource that matches the `parentRef`
+  name in `httproute.yml`. Update it if your existing Gateway has a different
+  name.
