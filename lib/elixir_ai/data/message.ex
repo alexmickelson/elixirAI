@@ -282,6 +282,38 @@ defmodule ElixirAi.Message do
     end
   end
 
+  # Deletes the most recent assistant text_message that has associated tool
+  # calls, along with all its tool_calls_request_messages (cascade) and any
+  # tool_response_messages linked to those calls (cascade). Used when a stop
+  # is issued while tools are in-flight so the conversation is left in a clean
+  # state for the next request.
+  def delete_interrupted_tool_cycle(conversation_id, topic: topic)
+      when is_binary(conversation_id) and byte_size(conversation_id) == 16 do
+    sql = """
+    DELETE FROM text_messages
+    WHERE id IN (
+      SELECT DISTINCT tm.id
+      FROM text_messages tm
+      INNER JOIN tool_calls_request_messages tc ON tc.text_message_id = tm.id
+      LEFT JOIN tool_response_messages tr ON tr.tool_call_id = tc.tool_call_id
+      WHERE tm.conversation_id = $(conversation_id)
+        AND tr.tool_call_id IS NULL
+    )
+    """
+
+    case DbHelpers.run_sql(sql, %{"conversation_id" => conversation_id}, topic) do
+      {:error, _} -> :error
+      _ -> :ok
+    end
+  end
+
+  def delete_interrupted_tool_cycle(conversation_id, topic: topic) do
+    case dump_uuid(conversation_id) do
+      {:ok, db_id} -> delete_interrupted_tool_cycle(db_id, topic: topic)
+      :error -> :error
+    end
+  end
+
   def update_approval_decision(tool_call_id, decision, opts) do
     topic = Keyword.fetch!(opts, :topic)
     justification = Keyword.get(opts, :justification)

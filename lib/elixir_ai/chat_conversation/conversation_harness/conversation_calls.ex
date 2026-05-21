@@ -2,22 +2,18 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
   import ElixirAi.ChatRunner.OutboundHelpers
   import ElixirAi.PubsubTopics
   alias ElixirAi.Message
+  require Logger
 
   def handle_cast(:ai_turn, state) do
-    state = drop_interrupted_reasoning_message(state)
-    new_state = %{state | current_status: :generating_ai_response}
-
-    {:ok, task_pid} =
-      ElixirAi.ChatUtils.request_ai_response(
-        self(),
-        messages_with_system_prompt(new_state.messages, state.system_prompt),
-        state.server_tools ++ state.liveview_tools ++ state.page_tools,
-        state.provider,
-        state.tool_choice,
-        state.response_format
+    if state.ai_task_pid && Process.alive?(state.ai_task_pid) do
+      Logger.warning(
+        "ai_turn requested but AI task already in flight for #{state.name}, ignoring"
       )
 
-    {:noreply, %{new_state | ai_task_pid: task_pid}}
+      {:noreply, state}
+    else
+      do_ai_turn(state)
+    end
   end
 
   def handle_cast({:user_message, text_content, tool_choice_override}, state) do
@@ -70,6 +66,35 @@ defmodule ElixirAi.ChatRunner.ConversationCalls do
 
       _ ->
         state
+    end
+  end
+
+  defp do_ai_turn(state) do
+    state = drop_interrupted_reasoning_message(state)
+
+    case List.last(state.messages) do
+      %{role: :assistant} ->
+        Logger.warning(
+          "ai_turn requested but last message is already :assistant for #{state.name} — " <>
+            "refusing to create consecutive assistant turns"
+        )
+
+        {:noreply, state}
+
+      _ ->
+        new_state = %{state | current_status: :generating_ai_response}
+
+        {:ok, task_pid} =
+          ElixirAi.ChatUtils.request_ai_response(
+            self(),
+            messages_with_system_prompt(new_state.messages, state.system_prompt),
+            state.server_tools ++ state.liveview_tools ++ state.page_tools,
+            state.provider,
+            state.tool_choice,
+            state.response_format
+          )
+
+        {:noreply, %{new_state | ai_task_pid: task_pid}}
     end
   end
 end

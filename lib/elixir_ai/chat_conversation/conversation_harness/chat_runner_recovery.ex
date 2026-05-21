@@ -171,7 +171,8 @@ defmodule ElixirAi.ChatRunner.Recovery do
         provider,
         tool_choice,
         stopped,
-        response_format
+        response_format,
+        recovered_tool_call_ids
       )
 
     {recovered_tool_call_ids, recovery_task_pid}
@@ -208,11 +209,13 @@ defmodule ElixirAi.ChatRunner.Recovery do
          provider,
          tool_choice,
          stopped,
-         response_format
+         response_format,
+         recovered_tool_call_ids
        ) do
     restart_roles = [:user, :tool]
 
-    if last_message && last_message.role in restart_roles && !stopped do
+    if last_message && last_message.role in restart_roles && !stopped &&
+         recovered_tool_call_ids == [] do
       Logger.info(
         "Last message role was #{last_message.role}, requesting AI response for conversation #{name}"
       )
@@ -238,8 +241,8 @@ defmodule ElixirAi.ChatRunner.Recovery do
 
     cond do
       stopped -> :stopped
-      last_message && last_message.role in restart_roles -> :generating_ai_response
       recovered_tool_call_ids != [] -> :pending_approval
+      last_message && last_message.role in restart_roles -> :generating_ai_response
       true -> :idle
     end
   end

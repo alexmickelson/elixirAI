@@ -285,7 +285,9 @@ defmodule ElixirAi.AiProvider do
            "api_key" => api_key
          } = entry
        ) do
-    capabilities = Map.get(entry, "capabilities", ["text"])
+    # Only carry capabilities from the YAML if the key is explicitly present.
+    # Omitting it preserves whatever the user has set in the database.
+    yaml_capabilities = Map.fetch(entry, "capabilities")
 
     case find_by_name(name) do
       {:error, :not_found} ->
@@ -296,11 +298,17 @@ defmodule ElixirAi.AiProvider do
           model_name: model,
           api_token: api_key,
           completions_url: endpoint,
-          capabilities: capabilities
+          capabilities: elem_or(yaml_capabilities, ["text"])
         })
 
-      {:ok, _} ->
-        Logger.debug("Provider '#{name}' already exists, skipping")
+      {:ok, existing} ->
+        Logger.info("Updating provider '#{name}' from providers config file")
+
+        upsert_from_yaml(
+          existing.id,
+          %{model_name: model, api_token: api_key, completions_url: endpoint},
+          yaml_capabilities
+        )
 
       {:error, reason} ->
         Logger.warning("Could not check existence of provider '#{name}': #{inspect(reason)}")
@@ -312,4 +320,42 @@ defmodule ElixirAi.AiProvider do
       "Skipping invalid provider entry in providers config file (must have name, model, responses_endpoint, api_key): #{inspect(entry)}"
     )
   end
+
+  defp upsert_from_yaml(id, attrs, yaml_capabilities) do
+    case Ecto.UUID.dump(id) do
+      {:ok, binary_id} ->
+        sql = """
+        UPDATE ai_providers
+        SET model_name = $(model_name),
+            api_token = $(api_token),
+            completions_url = $(completions_url),
+            updated_at = NOW()
+        WHERE id = $(id)
+        """
+
+        params = %{
+          "id" => binary_id,
+          "model_name" => attrs.model_name,
+          "api_token" => attrs.api_token,
+          "completions_url" => attrs.completions_url
+        }
+
+        case DbHelpers.run_sql(sql, params, providers_topic()) do
+          {:error, :db_error} ->
+            {:error, :db_error}
+
+          _result ->
+            case yaml_capabilities do
+              {:ok, caps} -> AiProviderCapabilities.update(id, caps)
+              :error -> :ok
+            end
+        end
+
+      :error ->
+        {:error, :invalid_uuid}
+    end
+  end
+
+  defp elem_or({:ok, value}, _default), do: value
+  defp elem_or(:error, default), do: default
 end

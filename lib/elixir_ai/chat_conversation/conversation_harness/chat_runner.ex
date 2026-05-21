@@ -1,7 +1,7 @@
 defmodule ElixirAi.ChatRunner do
   require Logger
   use GenServer
-  alias ElixirAi.{AiTools, Conversation}
+  alias ElixirAi.{AiTools, Conversation, Message}
   import ElixirAi.PubsubTopics
   import ElixirAi.ChatRunner.OutboundHelpers
 
@@ -169,44 +169,36 @@ defmodule ElixirAi.ChatRunner do
       send(pid, {:approval_response, ref, :denied})
     end)
 
-    # Commit any in-progress streaming response so it isn't lost
-    {new_messages, stop_broadcast} =
-      case state.streaming_response do
-        nil ->
-          {state.messages, :stopped}
+    topic = conversation_message_topic(state.name)
 
-        resp
-        when resp.content != "" or resp.reasoning_content != "" or resp.tool_calls != [] ->
-          cond do
-            resp.content != "" ->
-              # Has actual content — store the partial message
-              partial_message = %{
-                role: :assistant,
-                content: resp.content,
-                reasoning_content: resp.reasoning_content,
-                tool_calls: [],
-                interrupted: true
-              }
+    # Discard any in-progress streaming response without persisting it.
+    # Storing a partial assistant message leaves the conversation in an invalid
+    # state where the last message is an assistant turn, which causes providers
+    # to reject the next AI request ("Cannot have 2+ assistant messages at end").
+    # If there was streaming content in the UI, clearing streaming_response
+    # causes the streaming bubble to unmount on the next render.
 
-              store_message(state.conversation_id, state.name, partial_message)
-              {state.messages ++ [partial_message], {:stopped, partial_message}}
-
-            resp.reasoning_content != "" ->
-              # Stopped mid-reasoning with no actual content — discard the partial
-              # reasoning block; it cannot be used as an assistant prefill and would
-              # cause "incompatible with enable thinking" errors on the next turn.
-              {state.messages, :stopped}
-
-            true ->
-              {state.messages, :stopped}
-          end
-
-        _ ->
-          {state.messages, :stopped}
+    # Clean up any dangling tool call cycle if stop was pressed while tools
+    # were running. The assistant message with tool_calls was already stored,
+    # but with no (or incomplete) tool responses it cannot be used in future
+    # API requests.
+    {cleaned_messages, tool_cycle_removed_count} =
+      if state.pending_tool_calls != [] do
+        strip_tool_cycle_after_interupt(state.messages)
+      else
+        {state.messages, 0}
       end
 
+    if tool_cycle_removed_count > 0 do
+      Message.delete_interrupted_tool_cycle(state.conversation_id, topic: topic)
+
+      Enum.each(1..tool_cycle_removed_count, fn _ ->
+        broadcast_ui(state.name, :remove_last_message)
+      end)
+    end
+
     Conversation.set_stopped(state.name, true)
-    broadcast_ui(state.name, stop_broadcast)
+    broadcast_ui(state.name, :stopped)
     broadcast_admin_status(state.name, :stopped)
 
     {:noreply,
@@ -216,7 +208,7 @@ defmodule ElixirAi.ChatRunner do
          streaming_response: nil,
          pending_tool_calls: [],
          pending_approvals: %{},
-         messages: new_messages,
+         messages: cleaned_messages,
          stopped: true,
          current_status: :stopped
      }}
@@ -300,5 +292,34 @@ defmodule ElixirAi.ChatRunner do
 
   defp broadcast_admin_status(name, status) do
     Phoenix.PubSub.broadcast(ElixirAi.PubSub, admin_topic(), {:runner_status, name, status})
+  end
+
+  # Finds the last assistant message with tool_calls in the message list and
+  # removes it along with all subsequent tool-response messages (which belong to
+  # that same tool-call cycle). Returns {cleaned_messages, count_removed}.
+  defp strip_tool_cycle_after_interupt(messages) do
+    last_tool_call_index =
+      messages
+      |> Enum.with_index()
+      |> Enum.filter(fn {msg, _idx} ->
+        msg.role == :assistant and
+          is_list(Map.get(msg, :tool_calls)) and
+          Map.get(msg, :tool_calls) != []
+      end)
+      |> List.last()
+      |> case do
+        nil -> nil
+        {_msg, idx} -> idx
+      end
+
+    case last_tool_call_index do
+      nil ->
+        {messages, 0}
+
+      idx ->
+        cleaned = Enum.take(messages, idx)
+        removed = length(messages) - idx
+        {cleaned, removed}
+    end
   end
 end
