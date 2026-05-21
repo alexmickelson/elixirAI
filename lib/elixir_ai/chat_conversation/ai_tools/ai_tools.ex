@@ -48,42 +48,34 @@ defmodule ElixirAi.AiTools do
         name = :sys.get_state(server).name
         topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
 
-        result =
-          case ElixirAi.CommandApproval.classify(command) do
-            {:auto_allow, justification} ->
-              ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
-                justification: justification,
-                topic: topic
-              )
+        case ElixirAi.CommandApproval.classify(command) do
+          {:auto_allow, justification} ->
+            ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
+              justification: justification,
+              topic: topic
+            )
 
-              Phoenix.PubSub.broadcast(
-                ElixirAi.PubSub,
-                chat_topic(name),
-                {:conversation_stream_message,
-                 {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
-              )
+            Phoenix.PubSub.broadcast(
+              ElixirAi.PubSub,
+              chat_topic(name),
+              {:conversation_stream_message,
+               {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
+            )
 
-              execute_command(command)
+            result = execute_command(command)
+            send(server, {:stream, {:tool_response, nil, tool_call_id, result}})
 
-            {:needs_approval, justification} ->
-              {decision, cmd_result} = request_approval(server, command, justification)
+          {:needs_approval, justification} ->
+            Phoenix.PubSub.broadcast(
+              ElixirAi.PubSub,
+              chat_topic(name),
+              {:conversation_stream_message,
+               {:tool_approval_updated, tool_call_id, "awaiting_approval", justification}}
+            )
 
-              ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
-                justification: justification,
-                topic: topic
-              )
-
-              Phoenix.PubSub.broadcast(
-                ElixirAi.PubSub,
-                chat_topic(name),
-                {:conversation_stream_message,
-                 {:tool_approval_updated, tool_call_id, Atom.to_string(decision), justification}}
-              )
-
-              cmd_result
-          end
-
-        send(server, {:stream, {:tool_response, nil, tool_call_id, result}})
+            ref = make_ref()
+            send(server, {:pending_approval, ref, nil, tool_call_id, command, justification})
+        end
       rescue
         e ->
           reason = Exception.format(:error, e, __STACKTRACE__)
@@ -154,8 +146,7 @@ defmodule ElixirAi.AiTools do
           name = :sys.get_state(server).name
           topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
 
-          approved? =
-            case ElixirAi.CommandApproval.classify(command) do
+          case ElixirAi.CommandApproval.classify(command) do
               {:auto_allow, justification} ->
                 ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
                   justification: justification,
@@ -169,7 +160,8 @@ defmodule ElixirAi.AiTools do
                    {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
                 )
 
-                true
+                ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
+                forward_cmd_stream(server, current_message_id, tool_call_id)
 
               {:needs_approval, justification} ->
                 Phoenix.PubSub.broadcast(
@@ -179,34 +171,9 @@ defmodule ElixirAi.AiTools do
                    {:tool_approval_updated, tool_call_id, "awaiting_approval", justification}}
                 )
 
-                decision = request_approval_decision(server, command, justification)
-
-                ElixirAi.Message.update_approval_decision(tool_call_id, Atom.to_string(decision),
-                  justification: justification,
-                  topic: topic
-                )
-
-                Phoenix.PubSub.broadcast(
-                  ElixirAi.PubSub,
-                  chat_topic(name),
-                  {:conversation_stream_message,
-                   {:tool_approval_updated, tool_call_id, Atom.to_string(decision), justification}}
-                )
-
-                decision == :approved
+                ref = make_ref()
+                send(server, {:pending_approval, ref, current_message_id, tool_call_id, command, justification})
             end
-
-          if approved? do
-            ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
-            forward_cmd_stream(server, current_message_id, tool_call_id)
-          else
-            denied_result = {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}
-
-            send(
-              server,
-              {:stream, {:tool_response, current_message_id, tool_call_id, denied_result}}
-            )
-          end
         rescue
           e ->
             reason = Exception.format(:error, e, __STACKTRACE__)
@@ -256,51 +223,27 @@ defmodule ElixirAi.AiTools do
     end
   end
 
-  defp request_approval(server, command, reason) do
-    ref = make_ref()
-    send(server, {:register_pending_approval, ref, self(), command, reason})
+  @doc """
+  Spawns a Task to run an approved command via bash stream and forward
+  output chunks back to the runner server. Called by ChatRunner when the
+  user approves a pending command.
+  """
+  def execute_approved_run(server, current_message_id, tool_call_id, command) do
+    Task.start_link(fn ->
+      try do
+        ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
+        forward_cmd_stream(server, current_message_id, tool_call_id)
+      rescue
+        e ->
+          reason = Exception.format(:error, e, __STACKTRACE__)
+          Logger.error("Approved execution task crashed for #{tool_call_id}: #{reason}")
 
-    name = :sys.get_state(server).name
-
-    Phoenix.PubSub.broadcast(
-      ElixirAi.PubSub,
-      "ai_chat:#{name}",
-      {:tool_approval_request, ref, command, reason}
-    )
-
-    receive do
-      {:approval_response, ^ref, :approved} ->
-        {:approved, execute_command(command)}
-
-      {:approval_response, ^ref, :denied} ->
-        {:denied, {:ok, "[denied] User declined: #{command}\n[exit:1 | 0ms]"}}
-    after
-      120_000 ->
-        {:timed_out,
-         {:ok, "[denied] Approval timed out after 2 minutes: #{command}\n[exit:1 | 0ms]"}}
-    end
-  end
-
-  # Returns just the decision atom (:approved | :denied | :timed_out) without
-  # executing the command — callers handle execution themselves.
-  defp request_approval_decision(server, command, reason) do
-    ref = make_ref()
-    send(server, {:register_pending_approval, ref, self(), command, reason})
-
-    name = :sys.get_state(server).name
-
-    Phoenix.PubSub.broadcast(
-      ElixirAi.PubSub,
-      "ai_chat:#{name}",
-      {:tool_approval_request, ref, command, reason}
-    )
-
-    receive do
-      {:approval_response, ^ref, :approved} -> :approved
-      {:approval_response, ^ref, :denied} -> :denied
-    after
-      120_000 -> :timed_out
-    end
+          send(
+            server,
+            {:stream, {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+          )
+      end
+    end)
   end
 
   # ---------------------------------------------------------------------------
@@ -397,10 +340,6 @@ defmodule ElixirAi.AiTools do
       end)
     end)
   end
-
-  # ---------------------------------------------------------------------------
-  # Private
-  # ---------------------------------------------------------------------------
 
   defp dispatch_to_liveview(server, tool_name, args) do
     pids = GenServer.call(server, {:session, :get_liveview_pids})

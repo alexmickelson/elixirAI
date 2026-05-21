@@ -222,7 +222,7 @@ Hooks.ScrollBottom = {
     requestAnimationFrame(() => this.scrollToBottom());
   },
   updated() {
-    if (!this.userScrolledUp) this.scrollToBottom();
+    if (this.isNearBottom()) this.scrollToBottom();
   },
   isNearBottom() {
     return this.el.scrollTop <= 100;

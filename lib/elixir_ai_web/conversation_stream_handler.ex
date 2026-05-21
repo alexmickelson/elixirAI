@@ -193,14 +193,14 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
   end
 
   def handle(:stopped, socket) do
-    {:noreply, assign(socket, streaming_response: nil)}
+    {:noreply, assign(socket, streaming_response: nil, pending_approvals: [])}
   end
 
   def handle({:stopped, partial_message}, socket) do
     {:noreply,
      socket
      |> update(:messages, &(&1 ++ [partial_message]))
-     |> assign(streaming_response: nil)}
+     |> assign(streaming_response: nil, pending_approvals: [])}
   end
 
   def handle(:remove_last_message, socket) do

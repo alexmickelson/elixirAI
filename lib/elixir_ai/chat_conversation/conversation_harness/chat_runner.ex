@@ -165,9 +165,8 @@ defmodule ElixirAi.ChatRunner do
       Process.exit(state.ai_task_pid, :kill)
     end
 
-    Enum.each(state.pending_approvals, fn {ref, %{pid: pid}} ->
-      send(pid, {:approval_response, ref, :denied})
-    end)
+    # pending_approvals are data only — no task pids to notify.
+    # The tool call cycle is stripped below, so no tool_response needed.
 
     topic = conversation_message_topic(state.name)
 
@@ -219,8 +218,53 @@ defmodule ElixirAi.ChatRunner do
       {nil, _} ->
         {:noreply, state}
 
-      {pid, new_approvals} ->
-        send(pid, {:approval_response, ref, decision})
+      {%{current_message_id: mid, tool_call_id: tcid, command: cmd, reason: reason},
+       new_approvals} ->
+        topic = conversation_message_topic(state.name)
+
+        case decision do
+          :approved ->
+            Message.update_approval_decision(tcid, "approved",
+              justification: reason,
+              topic: topic
+            )
+
+            broadcast_ui(state.name, {:tool_approval_updated, tcid, "approved", reason})
+            AiTools.execute_approved_run(self(), mid, tcid, cmd)
+
+          {:denied, user_reason} ->
+            justification = "#{reason}\nUser reason: #{user_reason}"
+
+            Message.update_approval_decision(tcid, "denied",
+              justification: justification,
+              topic: topic
+            )
+
+            broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", justification})
+
+            send(
+              self(),
+              {:stream,
+               {:tool_response, mid, tcid,
+                {:ok,
+                 "[denied] User declined: #{cmd}\nUser reason: #{user_reason}\n[exit:1 | 0ms]"}}}
+            )
+
+          :denied ->
+            Message.update_approval_decision(tcid, "denied",
+              justification: reason,
+              topic: topic
+            )
+
+            broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", reason})
+
+            send(
+              self(),
+              {:stream,
+               {:tool_response, mid, tcid, {:ok, "[denied] User declined: #{cmd}\n[exit:1 | 0ms]"}}}
+            )
+        end
+
         new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
         broadcast_admin_status(state.name, new_status)
         {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
@@ -255,7 +299,13 @@ defmodule ElixirAi.ChatRunner do
     with_status_broadcast(state, StreamHandler.handle(msg, state))
   end
 
-  def handle_info({:register_pending_approval, ref, pid, command, reason}, state) do
+  def handle_info({:pending_approval, ref, current_message_id, tool_call_id, command, reason}, state) do
+    Phoenix.PubSub.broadcast(
+      ElixirAi.PubSub,
+      chat_topic(state.name),
+      {:tool_approval_request, ref, command, reason}
+    )
+
     broadcast_admin_status(state.name, :pending_approval)
 
     {:noreply,
@@ -263,7 +313,14 @@ defmodule ElixirAi.ChatRunner do
        state
        | current_status: :pending_approval,
          pending_approvals:
-           ApprovalTracker.register(state.pending_approvals, ref, pid, command, reason)
+           ApprovalTracker.register(
+             state.pending_approvals,
+             ref,
+             current_message_id,
+             tool_call_id,
+             command,
+             reason
+           )
      }}
   end
 
