@@ -158,8 +158,7 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
     {:noreply,
      socket
      |> update(:messages, &(&1 ++ [error_message]))
-     |> assign(streaming_response: nil)
-     |> push_event("scroll_to_bottom", %{})}
+     |> assign(streaming_response: nil)}
   end
 
   def handle({:ai_request_error, reason}, socket) do

@@ -144,29 +144,7 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   def handle({:ai_tool_call_end, id}, state) do
     raw_tool_calls = Enum.map(state.streaming_response.tool_calls, &Map.delete(&1, :index))
 
-    # Partition into calls with valid JSON args vs. malformed/incomplete ones.
-    # Malformed calls are silently dropped — they never executed and have no value.
-    {valid_tool_calls, dropped_count} =
-      Enum.reduce(raw_tool_calls, {[], 0}, fn tc, {valid, dropped} ->
-        case Jason.decode(tc.arguments) do
-          {:ok, _} ->
-            {[tc | valid], dropped}
-
-          {:error, decode_error} ->
-            Logger.warning("""
-            Dropping tool call — arguments are not valid JSON (likely truncated by stop)
-              conversation: #{state.name} (#{state.conversation_id})
-              tool:         #{tc.name}
-              id:           #{tc.id}
-              error:        #{inspect(decode_error)}
-              args:         #{tc.arguments}
-            """)
-
-            {valid, dropped + 1}
-        end
-      end)
-
-    valid_tool_calls = Enum.reverse(valid_tool_calls)
+    {valid_tool_calls, dropped_count} = filter_valid_tool_calls(raw_tool_calls, state)
 
     if dropped_count > 0 do
       Logger.info(
@@ -174,67 +152,16 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
       )
     end
 
-    tool_request_message = %{
-      role: :assistant,
-      content: state.streaming_response.content,
-      reasoning_content: state.streaming_response.reasoning_content,
-      tool_calls: valid_tool_calls
-    }
+    tool_request_message = build_tool_request_message(state.streaming_response, valid_tool_calls)
 
-    # For valid calls, attempt to dispatch them (unknown tool name is still an error).
-    {failed_call_messages, pending_call_ids} =
-      Enum.reduce(valid_tool_calls, {[], []}, fn tool_call, {failed, pending} ->
-        {:ok, decoded_args} = Jason.decode(tool_call.arguments)
-
-        case Enum.find(all_tools(state), fn t ->
-               t.name == tool_call.name
-             end) do
-          nil ->
-            error_msg = "No tool definition found for #{tool_call.name}"
-            Logger.error(error_msg)
-
-            {[
-               %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
-               | failed
-             ], pending}
-
-          tool ->
-            tool.run_function.(id, tool_call.id, decoded_args)
-            {failed, [tool_call.id | pending]}
-        end
-      end)
-
-    # If all tool calls were malformed (or there were none after filtering),
-    # treat this as a plain text assistant message ending.
     if valid_tool_calls == [] do
-      final_message = %{
-        role: :assistant,
-        content: state.streaming_response.content,
-        reasoning_content: state.streaming_response.reasoning_content,
-        tool_calls: []
-      }
-
-      store_message(state.conversation_id, state.name, final_message)
-      broadcast_ui(state.name, {:end_ai_response, final_message})
-
-      {:noreply,
-       %{
-         state
-         | messages: state.messages ++ [final_message],
-           streaming_response: nil,
-           pending_tool_calls: [],
-           current_status: :idle,
-           ai_task_pid: nil
-       }}
+      finalize_as_plain_text_response(state, tool_request_message)
     else
-      store_message(
-        state.conversation_id,
-        state.name,
-        [tool_request_message] ++ failed_call_messages
-      )
+      {failed_call_messages, dispatchable_calls} = classify_tool_calls(valid_tool_calls, state)
+      persist_tool_call_cycle(state, tool_request_message, failed_call_messages)
+      dispatch_tool_calls(dispatchable_calls, id)
 
-      broadcast_ui(state.name, {:tool_request_message, tool_request_message})
-      Enum.each(failed_call_messages, &broadcast_ui(state.name, {:one_tool_finished, &1}))
+      pending_call_ids = Enum.map(dispatchable_calls, fn {_tool, tc, _args} -> tc.id end)
 
       {:noreply,
        %{
@@ -394,6 +321,96 @@ defmodule ElixirAi.ChatRunner.StreamHandler do
   defp format_error(%{__struct__: mod, reason: r}), do: "#{inspect(mod)}: #{inspect(r)}"
   defp format_error(msg) when is_binary(msg), do: msg
   defp format_error(reason), do: inspect(reason)
+
+  # Phase 1 — strip out tool calls with malformed/incomplete JSON arguments.
+  # These are silently dropped; they never executed and have no recovery value.
+  defp filter_valid_tool_calls(raw_tool_calls, state) do
+    {reversed_valid, dropped_count} =
+      Enum.reduce(raw_tool_calls, {[], 0}, fn tc, {valid, dropped} ->
+        case Jason.decode(tc.arguments) do
+          {:ok, _} ->
+            {[tc | valid], dropped}
+
+          {:error, decode_error} ->
+            Logger.warning("""
+            Dropping tool call — arguments are not valid JSON (likely truncated by stop)
+              conversation: #{state.name} (#{state.conversation_id})
+              tool:         #{tc.name}
+              id:           #{tc.id}
+              error:        #{inspect(decode_error)}
+              args:         #{tc.arguments}
+            """)
+
+            {valid, dropped + 1}
+        end
+      end)
+
+    {Enum.reverse(reversed_valid), dropped_count}
+  end
+
+  defp build_tool_request_message(streaming_response, valid_tool_calls) do
+    %{
+      role: :assistant,
+      content: streaming_response.content,
+      reasoning_content: streaming_response.reasoning_content,
+      tool_calls: valid_tool_calls
+    }
+  end
+
+  # Phase 2 — classify each valid tool call without executing anything.
+  # Separates calls with unknown tool names (immediate error) from dispatchable
+  # ones. Must complete before persist so the full failed_call_messages list is known.
+  defp classify_tool_calls(valid_tool_calls, state) do
+    {reversed_failed, reversed_dispatchable} =
+      Enum.reduce(valid_tool_calls, {[], []}, fn tool_call, {failed, dispatchable} ->
+        {:ok, decoded_args} = Jason.decode(tool_call.arguments)
+
+        case Enum.find(all_tools(state), fn t -> t.name == tool_call.name end) do
+          nil ->
+            error_msg = "No tool definition found for #{tool_call.name}"
+            Logger.error(error_msg)
+            error_response = %{role: :tool, content: error_msg, tool_call_id: tool_call.id, is_error: true}
+            {[error_response | failed], dispatchable}
+
+          tool ->
+            {failed, [{tool, tool_call, decoded_args} | dispatchable]}
+        end
+      end)
+
+    {Enum.reverse(reversed_failed), Enum.reverse(reversed_dispatchable)}
+  end
+
+  # Phase 3 — persist the assistant message and ALL tool_calls_request_messages rows
+  # before any tool runs. A fast auto-allowed tool can complete and attempt to write
+  # its tool_response_messages row immediately; the FK constraint requires the parent
+  # row to already exist in tool_calls_request_messages.
+  defp persist_tool_call_cycle(state, tool_request_message, failed_call_messages) do
+    store_message(state.conversation_id, state.name, [tool_request_message] ++ failed_call_messages)
+    broadcast_ui(state.name, {:tool_request_message, tool_request_message})
+    Enum.each(failed_call_messages, &broadcast_ui(state.name, {:one_tool_finished, &1}))
+  end
+
+  # Phase 4 — dispatch tools only after the DB write has committed.
+  defp dispatch_tool_calls(dispatchable_calls, stream_id) do
+    Enum.each(dispatchable_calls, fn {tool, tool_call, decoded_args} ->
+      tool.run_function.(stream_id, tool_call.id, decoded_args)
+    end)
+  end
+
+  defp finalize_as_plain_text_response(state, final_message) do
+    store_message(state.conversation_id, state.name, final_message)
+    broadcast_ui(state.name, {:end_ai_response, final_message})
+
+    {:noreply,
+     %{
+       state
+       | messages: state.messages ++ [final_message],
+         streaming_response: nil,
+         pending_tool_calls: [],
+         current_status: :idle,
+         ai_task_pid: nil
+     }}
+  end
 
   # Fallback fired ~1.5 s after finish_reason: stop for providers that never
   # send a usage chunk. No-op if the usage chunk already finalized the message.

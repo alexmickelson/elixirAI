@@ -64,7 +64,6 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(background_color: "bg-seafoam-950/30")
          |> assign(pending_approvals: [])
          |> assign(deny_reason_ref: nil)
-         |> assign(deny_reason_input: "")
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
@@ -86,7 +85,6 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(background_color: "bg-seafoam-950/30")
          |> assign(pending_approvals: [])
          |> assign(deny_reason_ref: nil)
-         |> assign(deny_reason_input: "")
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(
@@ -110,7 +108,6 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(background_color: "bg-seafoam-950/30")
          |> assign(pending_approvals: [])
          |> assign(deny_reason_ref: nil)
-         |> assign(deny_reason_input: "")
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
@@ -196,30 +193,33 @@ defmodule ElixirAiWeb.ChatLive do
                   Allow
                 </button>
                 <%= if @deny_reason_ref == approval.ref do %>
-                  <div class="flex flex-1 flex-col gap-2">
+                  <form
+                    phx-submit="submit_deny_reason"
+                    phx-value-ref={encode_ref(approval.ref)}
+                    class="flex flex-1 flex-col gap-2"
+                  >
                     <textarea
-                      phx-change="update_deny_reason"
                       name="deny_reason"
                       placeholder="Reason for denial…"
                       class="w-full rounded border border-red-800/50 bg-black/30 px-2 py-1.5 text-xs text-red-300 placeholder-red-800/60 focus:outline-none focus:ring-1 focus:ring-red-700/50"
                       rows="2"
-                    ><%= @deny_reason_input %></textarea>
+                    ></textarea>
                     <div class="flex gap-2">
                       <button
-                        phx-click="submit_deny_reason"
-                        phx-value-ref={encode_ref(approval.ref)}
+                        type="submit"
                         class="rounded border border-red-800/50 px-3 py-1.5 text-xs text-red-400 transition-colors hover:bg-red-950/40"
                       >
                         Deny with reason
                       </button>
                       <button
+                        type="button"
                         phx-click="cancel_deny_reason"
                         class="rounded border border-zinc-700/50 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:bg-zinc-900/40"
                       >
                         Cancel
                       </button>
                     </div>
-                  </div>
+                  </form>
                 <% else %>
                   <button
                     phx-click="deny_command"
@@ -363,7 +363,7 @@ defmodule ElixirAiWeb.ChatLive do
     if runner_active?(socket.assigns.runner_status) do
       {:noreply, socket}
     else
-      ChatRunner.ai_turn(socket.assigns.conversation_name)
+      ChatRunner.new_user_message(socket.assigns.conversation_name, "continue")
       {:noreply, socket}
     end
   end
@@ -423,26 +423,20 @@ defmodule ElixirAiWeb.ChatLive do
      socket
      |> assign(pending_approvals: remaining)
      |> assign(deny_reason_ref: nil)
-     |> assign(deny_reason_input: "")
      |> assign(runner_status: status)}
   end
 
   def handle_event("show_deny_reason", %{"ref" => ref_string}, socket) do
     ref = decode_ref(ref_string)
-    {:noreply, assign(socket, deny_reason_ref: ref, deny_reason_input: "")}
+    {:noreply, assign(socket, deny_reason_ref: ref)}
   end
 
   def handle_event("cancel_deny_reason", _params, socket) do
-    {:noreply, assign(socket, deny_reason_ref: nil, deny_reason_input: "")}
+    {:noreply, assign(socket, deny_reason_ref: nil)}
   end
 
-  def handle_event("update_deny_reason", %{"deny_reason" => text}, socket) do
-    {:noreply, assign(socket, deny_reason_input: text)}
-  end
-
-  def handle_event("submit_deny_reason", %{"ref" => ref_string}, socket) do
+  def handle_event("submit_deny_reason", %{"ref" => ref_string, "deny_reason" => reason}, socket) do
     ref = decode_ref(ref_string)
-    reason = socket.assigns.deny_reason_input
     ChatRunner.approval_decision(socket.assigns.conversation_name, ref, {:denied, reason})
     remaining = Enum.reject(socket.assigns.pending_approvals, fn a -> a.ref == ref end)
     status = if remaining == [], do: :awaiting_tools, else: :pending_approval
@@ -451,7 +445,6 @@ defmodule ElixirAiWeb.ChatLive do
      socket
      |> assign(pending_approvals: remaining)
      |> assign(deny_reason_ref: nil)
-     |> assign(deny_reason_input: "")
      |> assign(runner_status: status)}
   end
 
@@ -469,7 +462,6 @@ defmodule ElixirAiWeb.ChatLive do
       |> assign(provider: conversation.provider)
       |> assign(pending_approvals: pending_approvals)
       |> assign(runner_status: conversation.current_status)
-      |> push_event("scroll_to_bottom", %{})
 
     # Now sync streaming state if there's an active stream
     if conversation.streaming_response do
@@ -504,7 +496,6 @@ defmodule ElixirAiWeb.ChatLive do
               do: push_event(s, "reasoning_chunk", %{chunk: reasoning_content}),
               else: s
           end)
-          |> push_event("scroll_to_bottom", %{})
 
         {:noreply, socket}
     end
@@ -551,8 +542,7 @@ defmodule ElixirAiWeb.ChatLive do
     {:noreply,
      socket
      |> update(:pending_approvals, &[approval | &1])
-     |> assign(runner_status: :pending_approval)
-     |> push_event("scroll_to_bottom", %{})}
+     |> assign(runner_status: :pending_approval)}
   end
 
   @impl Phoenix.LiveView

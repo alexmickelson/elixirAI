@@ -218,56 +218,106 @@ defmodule ElixirAi.ChatRunner do
       {nil, _} ->
         {:noreply, state}
 
-      {%{current_message_id: mid, tool_call_id: tcid, command: cmd, reason: reason},
-       new_approvals} ->
+      {%{current_message_id: mid, tool_call_id: tcid, command: cmd, reason: reason}, new_approvals} ->
         topic = conversation_message_topic(state.name)
 
         case decision do
-          :approved ->
-            Message.update_approval_decision(tcid, "approved",
-              justification: reason,
-              topic: topic
-            )
-
-            broadcast_ui(state.name, {:tool_approval_updated, tcid, "approved", reason})
-            AiTools.execute_approved_run(self(), mid, tcid, cmd)
-
-          {:denied, user_reason} ->
-            justification = "#{reason}\nUser reason: #{user_reason}"
-
-            Message.update_approval_decision(tcid, "denied",
-              justification: justification,
-              topic: topic
-            )
-
-            broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", justification})
-
-            send(
-              self(),
-              {:stream,
-               {:tool_response, mid, tcid,
-                {:ok,
-                 "[denied] User declined: #{cmd}\nUser reason: #{user_reason}\n[exit:1 | 0ms]"}}}
-            )
-
-          :denied ->
-            Message.update_approval_decision(tcid, "denied",
-              justification: reason,
-              topic: topic
-            )
-
-            broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", reason})
-
-            send(
-              self(),
-              {:stream,
-               {:tool_response, mid, tcid, {:ok, "[denied] User declined: #{cmd}\n[exit:1 | 0ms]"}}}
-            )
+          :approved -> execute_approved_tool(state, new_approvals, mid, tcid, cmd, reason, topic)
+          {:denied, user_reason} -> deny_tool_with_user_reason(state, new_approvals, mid, tcid, cmd, reason, user_reason, topic)
+          :denied -> deny_tool_silently(state, new_approvals, mid, tcid, cmd, reason, topic)
         end
+    end
+  end
 
-        new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
-        broadcast_admin_status(state.name, new_status)
-        {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
+  defp execute_approved_tool(state, new_approvals, mid, tcid, cmd, reason, topic) do
+    Message.update_approval_decision(tcid, "approved", justification: reason, topic: topic)
+    broadcast_ui(state.name, {:tool_approval_updated, tcid, "approved", reason})
+    AiTools.execute_approved_run(self(), mid, tcid, cmd)
+
+    new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
+    broadcast_admin_status(state.name, new_status)
+    {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
+  end
+
+  defp deny_tool_with_user_reason(state, new_approvals, _mid, tcid, cmd, reason, user_reason, topic) do
+    justification = "#{reason}\nUser reason: #{user_reason}"
+    denial_content = "[denied] User declined: #{cmd}\nUser reason: #{user_reason}\n[exit:1 | 0ms]"
+
+    Message.update_approval_decision(tcid, "denied", justification: justification, topic: topic)
+
+    # Write tool response to DB first (critical path) so recovery can reconstruct
+    # the conversation and the LLM sees a completed tool call rather than a dangling one.
+    tool_response_msg = %{
+      role: :tool,
+      content: inspect({:ok, denial_content}, printable_limit: :infinity),
+      tool_call_id: tcid
+    }
+
+    store_message(state.conversation_id, state.name, tool_response_msg)
+    broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", justification})
+    broadcast_ui(state.name, {:one_tool_finished, tool_response_msg})
+
+    # Inject the user's reason as a user message so the LLM gets human context
+    # and won't retry the same command blindly.
+    user_msg = %{role: :user, content: user_reason}
+    store_message(state.conversation_id, state.name, user_msg)
+    broadcast_ui(state.name, {:user_chat_message, user_msg})
+
+    new_pending = Enum.filter(state.pending_tool_calls, &(&1 != tcid))
+    new_messages = state.messages ++ [tool_response_msg, user_msg]
+
+    advance_after_tool_response(state, new_approvals, new_messages, new_pending)
+  end
+
+  defp deny_tool_silently(state, new_approvals, mid, tcid, cmd, reason, topic) do
+    Message.update_approval_decision(tcid, "denied", justification: reason, topic: topic)
+    broadcast_ui(state.name, {:tool_approval_updated, tcid, "denied", reason})
+
+    send(self(), {:stream, {:tool_response, mid, tcid, {:ok, "[denied] User declined: #{cmd}\n[exit:1 | 0ms]"}}})
+
+    new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
+    broadcast_admin_status(state.name, new_status)
+    {:noreply, %{state | pending_approvals: new_approvals, current_status: new_status}}
+  end
+
+  defp advance_after_tool_response(state, new_approvals, new_messages, new_pending) do
+    if new_pending == [] do
+      broadcast_ui(state.name, :tool_calls_finished)
+
+      {:ok, task_pid} =
+        ElixirAi.ChatUtils.request_ai_response(
+          self(),
+          messages_with_system_prompt(new_messages, state.system_prompt),
+          state.server_tools ++ state.liveview_tools ++ state.page_tools,
+          state.provider,
+          state.tool_choice,
+          state.response_format
+        )
+
+      new_status = if map_size(new_approvals) == 0, do: :generating_ai_response, else: :pending_approval
+      broadcast_admin_status(state.name, new_status)
+
+      {:noreply,
+       %{
+         state
+         | messages: new_messages,
+           pending_tool_calls: [],
+           pending_approvals: new_approvals,
+           ai_task_pid: task_pid,
+           current_status: new_status
+       }}
+    else
+      new_status = if map_size(new_approvals) == 0, do: :awaiting_tools, else: :pending_approval
+      broadcast_admin_status(state.name, new_status)
+
+      {:noreply,
+       %{
+         state
+         | messages: new_messages,
+           pending_tool_calls: new_pending,
+           pending_approvals: new_approvals,
+           current_status: new_status
+       }}
     end
   end
 
