@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   xz-utils \
   supervisor \
+  openssh-server \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash sandbox
@@ -54,10 +55,11 @@ RUN cp -a /nix/. /nix-defaults/
 COPY entrypoint.sh /entrypoint.sh
 COPY main.sh /main.sh
 COPY supervisord.conf /etc/supervisor/conf.d/sandbox.conf
-RUN chmod +x /entrypoint.sh /main.sh
+COPY sshd_config /etc/ssh/sshd_config
+RUN chmod +x /entrypoint.sh /main.sh \
+  && mkdir -p /var/run/sshd
 
 WORKDIR /home/sandbox
-USER sandbox
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["sleep", "infinity"]

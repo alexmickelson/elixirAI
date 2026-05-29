@@ -24,7 +24,7 @@ RUN mix release
 # ---- Runtime stage ----
 FROM elixir:1.19.5-otp-28-alpine AS runtime
 
-RUN apk add --no-cache libstdc++ openssl ncurses-libs docker-cli
+RUN apk add --no-cache libstdc++ openssl ncurses-libs openssh-client
 
 WORKDIR /app
 

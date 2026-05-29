@@ -1,0 +1,15 @@
+providers.yml
+deps/
+_build/
+agent_sandbox/
+deps/
+kubernetes/
+nginx/
+sandbox/
+.env
+.gitignore
+dev.Dockerfile
+Dockerfile
+docker-compose.yml
+README.md
+*.md

@@ -24,20 +24,15 @@ defmodule ElixirAi.CommandRunner do
   Uses a Port so the GenServer mailbox is not blocked.
   """
   def run_bash_stream(shell_command, tool_call_id, caller) when is_binary(shell_command) do
-    container = container_name()
+    ssh_cmd_args = ssh_args() ++ ["bash", "-c", "{\n#{shell_command}\n} 2>&1"]
 
-    wrapped =
-      "{\n#{shell_command}\n} 2>&1"
-
-    docker_args = ["exec", "-u", "1000", container, "bash", "-c", wrapped]
-
-    Logger.info("CommandRunner (stream): #{container} $ #{shell_command}")
+    Logger.info("CommandRunner (stream): ssh $ #{shell_command}")
 
     start_time = System.monotonic_time(:millisecond)
 
     port =
-      Port.open({:spawn_executable, System.find_executable("docker")}, [
-        {:args, docker_args},
+      Port.open({:spawn_executable, System.find_executable("ssh")}, [
+        {:args, ssh_cmd_args},
         :binary,
         :exit_status,
         :use_stdio,
@@ -79,14 +74,8 @@ defmodule ElixirAi.CommandRunner do
   Returns `{:ok, %{stdout, stderr, exit_code, duration_ms}}` or `{:error, reason}`.
   """
   def run_bash(shell_command) when is_binary(shell_command) do
-    container = container_name()
-
     # Wrap command to capture stderr separately via temp file + marker.
-    # This ensures stderr is NEVER dropped.
-    # NOTE: wrapped is passed directly as a bash script argument via System.cmd
-    # (no intermediate shell), so we do NOT use sh -c '...' quoting here.
-    # Using sh -c with single-quote wrapping breaks commands that contain
-    # single quotes, such as heredocs with quoted delimiters (<< 'EOF').
+    # NOTE: the temp file lives on the remote sandbox host.
     wrapped =
       "{\n#{shell_command}\n} 2>/tmp/.cmd_stderr\n" <>
         "__exit=$?\n" <>
@@ -95,14 +84,14 @@ defmodule ElixirAi.CommandRunner do
         "fi\n" <>
         "exit $__exit"
 
-    docker_args = ["exec", "-u", "1000", container, "bash", "-c", wrapped]
+    ssh_cmd_args = ssh_args() ++ ["bash", "-c", wrapped]
 
-    Logger.info("CommandRunner: #{container} $ #{shell_command}")
+    Logger.info("CommandRunner: ssh $ #{shell_command}")
 
     start_time = System.monotonic_time(:millisecond)
 
     try do
-      {combined, exit_code} = System.cmd("docker", docker_args, stderr_to_stdout: true)
+      {combined, exit_code} = System.cmd("ssh", ssh_cmd_args, stderr_to_stdout: true)
       duration_ms = System.monotonic_time(:millisecond) - start_time
       {stdout, stderr} = split_stderr(combined)
 
@@ -119,13 +108,12 @@ defmodule ElixirAi.CommandRunner do
   Used for health checks and direct binary invocation.
   """
   def execute(command, args \\ []) when is_binary(command) and is_list(args) do
-    container = container_name()
-    docker_args = ["exec", "-u", "1000", container, command | args]
+    ssh_cmd_args = ssh_args() ++ [command | args]
 
     start_time = System.monotonic_time(:millisecond)
 
     try do
-      {output, exit_code} = System.cmd("docker", docker_args, stderr_to_stdout: true)
+      {output, exit_code} = System.cmd("ssh", ssh_cmd_args, stderr_to_stdout: true)
       duration_ms = System.monotonic_time(:millisecond) - start_time
 
       {:ok, %{stdout: output, stderr: "", exit_code: exit_code, duration_ms: duration_ms}}
@@ -156,7 +144,24 @@ defmodule ElixirAi.CommandRunner do
     end
   end
 
-  defp container_name do
-    Application.get_env(:elixir_ai, :sandbox_container) || "llm_sandbox"
+  defp ssh_args do
+    host = System.get_env("SANDBOX_SSH_HOST", "llm_sandbox")
+    user = System.get_env("SANDBOX_SSH_USER", "sandbox")
+    key = System.get_env("SANDBOX_SSH_KEY", "/ssh_keys/id_ed25519")
+    port = System.get_env("SANDBOX_SSH_PORT", "22")
+
+    [
+      "-i",
+      key,
+      "-o",
+      "StrictHostKeyChecking=no",
+      "-o",
+      "UserKnownHostsFile=/dev/null",
+      "-o",
+      "BatchMode=yes",
+      "-p",
+      port,
+      "#{user}@#{host}"
+    ]
   end
 end

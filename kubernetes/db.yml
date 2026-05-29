@@ -22,13 +22,18 @@ spec:
             - name: POSTGRES_USER
               value: "elixir_ai"
             - name: POSTGRES_PASSWORD
-              value: "elixir_ai"
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
               value: "elixir_ai"
           volumeMounts:
             - name: schema
               mountPath: /docker-entrypoint-initdb.d
               readOnly: true
+            - name: data
+              mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "elixir_ai"]
@@ -45,7 +50,21 @@ spec:
         - name: schema
           configMap:
             name: db-schema
-
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ai-ha-elixir
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
 ---
 apiVersion: v1
 kind: Service

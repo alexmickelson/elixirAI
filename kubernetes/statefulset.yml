@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: ai-ha-elixir
-          image: alexmickelson/$IMAGE_NAME:$GITHUB_RUN_NUMBER
+          image: alexmickelson/elixir-ai:20260522092224
           ports:
             - containerPort: 4000
               name: http
@@ -58,6 +58,22 @@ spec:
                 secretKeyRef:
                   name: ai-ha-elixir-secrets
                   key: AI_TOKEN
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: DATABASE_URL
+            - name: SANDBOX_SSH_HOST
+              value: "sandbox"
+            - name: SANDBOX_SSH_USER
+              value: "sandbox"
+            - name: SANDBOX_SSH_KEY
+              value: "/run/secrets/sandbox_ssh_key"
+          volumeMounts:
+            - name: sandbox-ssh-key
+              mountPath: /run/secrets/sandbox_ssh_key
+              subPath: private_key
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -79,3 +95,11 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      volumes:
+        - name: sandbox-ssh-key
+          secret:
+            secretName: sandbox-ssh-secret
+            items:
+              - key: private_key
+                path: private_key
+                mode: 0600

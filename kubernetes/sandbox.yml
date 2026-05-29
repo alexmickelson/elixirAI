@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox
+  namespace: ai-ha-elixir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandbox
+  template:
+    metadata:
+      labels:
+        app: sandbox
+    spec:
+      containers:
+        - name: sandbox
+          image: alexmickelson/elixir-ai-sandbox:latest
+          ports:
+            - containerPort: 22
+              name: ssh
+          volumeMounts:
+            - name: ssh-pubkey
+              mountPath: /run/secrets/sandbox_ssh_pubkey
+              subPath: public_key
+              readOnly: true
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: ssh-pubkey
+          secret:
+            secretName: sandbox-ssh-secret
+            items:
+              - key: public_key
+                path: public_key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox
+  namespace: ai-ha-elixir
+spec:
+  selector:
+    app: sandbox
+  ports:
+    - port: 22
+      targetPort: 22
+      name: ssh

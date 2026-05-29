@@ -33,6 +33,9 @@ services:
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
       WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
+      SANDBOX_SSH_HOST: llm_sandbox
+      SANDBOX_SSH_USER: sandbox
+      SANDBOX_SSH_KEY: /ssh_keys/id_ed25519
     user: root
     command: |
       sh -c '
@@ -46,6 +49,7 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - ssh_keys:/ssh_keys:ro
     depends_on:
       db:
         condition: service_healthy
@@ -75,6 +79,9 @@ services:
       SECRET_KEY_BASE: F1nY5uSyD0HfoWejcuuQiaQoMQrjrlFigb3bJ7p4hTXwpTza6sPLpmd+jLS7p0Sh
       PROVIDERS_CONFIG_PATH: /app/providers.yml
       WHISPER_ENDPOINT: http://ai-office-server.beefalo-newton.ts.net:8082/inference
+      SANDBOX_SSH_HOST: llm_sandbox
+      SANDBOX_SSH_USER: sandbox
+      SANDBOX_SSH_KEY: /ssh_keys/id_ed25519
     user: root
     command: |
       sh -c '
@@ -87,8 +94,11 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
+      - ssh_keys:/ssh_keys:ro
     depends_on:
       db:
+        condition: service_healthy
+      llm_sandbox:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
@@ -106,11 +116,13 @@ services:
     volumes:
       - ./agent_sandbox:/home/sandbox
       - nix_store:/nix
+      - ssh_keys:/ssh_keys
     healthcheck:
-      test: ["CMD", "echo", "ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/22"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
   # mcp-searxng:
   #   image: isokoliuk/mcp-searxng:latest
@@ -145,3 +157,4 @@ services:
 
 volumes:
   nix_store:
+  ssh_keys:
