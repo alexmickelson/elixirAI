@@ -80,9 +80,7 @@ defmodule ElixirAi.Message do
           Enum.map(tool_call_msgs, &Map.put(&1, :_table, "tool_calls_request_messages")) ++
           Enum.map(tool_response_msgs, &Map.put(&1, :_table, "tool_response_messages"))
 
-      by_key = Map.new(tagged, fn row -> {{row._table, row.id}, row} end)
-
-      ordered = sort_by_prev_message(tagged, by_key)
+      ordered = sort_by_prev_message(tagged)
 
       # Group tool call rows by their parent text_message_id, preserving chain
       # order so they reconstruct into the same shape as the streaming path
@@ -166,6 +164,7 @@ defmodule ElixirAi.Message do
       tm.inserted_at
     FROM text_messages tm
     WHERE tm.conversation_id = $(conversation_id)
+    ORDER BY tm.inserted_at ASC, tm.id ASC
     """
 
     DbHelpers.run_sql(
@@ -192,6 +191,7 @@ defmodule ElixirAi.Message do
     FROM tool_calls_request_messages tc
     JOIN text_messages tm ON tc.text_message_id = tm.id
     WHERE tm.conversation_id = $(conversation_id)
+    ORDER BY tc.inserted_at ASC, tc.id ASC
     """
 
     DbHelpers.run_sql(
@@ -215,6 +215,7 @@ defmodule ElixirAi.Message do
     JOIN tool_calls_request_messages tc ON tr.tool_call_id = tc.tool_call_id
     JOIN text_messages tm ON tc.text_message_id = tm.id
     WHERE tm.conversation_id = $(conversation_id)
+    ORDER BY tr.inserted_at ASC, tr.id ASC
     """
 
     DbHelpers.run_sql(
@@ -545,34 +546,57 @@ defmodule ElixirAi.Message do
     end
   end
 
-  defp sort_by_prev_message([], _by_key), do: []
+  defp sort_by_prev_message([]), do: []
 
-  defp sort_by_prev_message(rows, _by_key) do
-    # Find the head: the row whose {prev_message_table, prev_message_id} is not in the set,
-    # i.e. it has no predecessor among this conversation's messages.
+  defp sort_by_prev_message(rows) do
     keys = MapSet.new(rows, fn r -> {r._table, r.id} end)
 
-    head =
-      Enum.find(rows, fn r ->
+    heads =
+      rows
+      |> Enum.filter(fn r ->
         prev_key = {r[:prev_message_table], r[:prev_message_id]}
         is_nil(r[:prev_message_id]) or not MapSet.member?(keys, prev_key)
       end)
+      |> Enum.sort_by(&sort_row_key/1)
 
-    if is_nil(head) do
+    children_by_prev =
       rows
-    else
-      # Build a reverse index: prev pointer -> row that points to it
-      by_prev =
-        Map.new(rows, fn r ->
-          {{r[:prev_message_table], r[:prev_message_id]}, r}
-        end)
-
-      Stream.iterate(head, fn r ->
-        Map.get(by_prev, {r._table, r.id})
+      |> Enum.group_by(fn r -> {r[:prev_message_table], r[:prev_message_id]} end)
+      |> Map.new(fn {prev_key, group} ->
+        {prev_key, Enum.sort_by(group, &sort_row_key/1)}
       end)
-      |> Enum.take_while(&(&1 != nil))
+
+    {ordered_rev, visited} =
+      Enum.reduce(heads, {[], MapSet.new()}, fn head, {ordered, visited} ->
+        walk_message_graph(head, children_by_prev, ordered, visited)
+      end)
+
+    ordered = Enum.reverse(ordered_rev)
+
+    remaining =
+      rows
+      |> Enum.reject(fn row -> MapSet.member?(visited, {row._table, row.id}) end)
+      |> Enum.sort_by(&sort_row_key/1)
+
+    ordered ++ remaining
+  end
+
+  defp walk_message_graph(row, children_by_prev, ordered, visited) do
+    row_key = {row._table, row.id}
+
+    if MapSet.member?(visited, row_key) do
+      {ordered, visited}
+    else
+      visited = MapSet.put(visited, row_key)
+      children = Map.get(children_by_prev, row_key, [])
+
+      Enum.reduce(children, {[row | ordered], visited}, fn child, {acc, acc_visited} ->
+        walk_message_graph(child, children_by_prev, acc, acc_visited)
+      end)
     end
   end
+
+  defp sort_row_key(row), do: {row.inserted_at, row.id, row._table}
 
   defp encode_tool_call_arguments(args) when is_binary(args), do: args
   defp encode_tool_call_arguments(args), do: Jason.encode!(args)

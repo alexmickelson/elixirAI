@@ -154,4 +154,86 @@ defmodule ElixirAi.MessageStorageTest do
     assert_receive {:insert_tool_response, params}, 2000
     assert params["tool_call_id"] == "tc_1"
   end
+
+  test "load_for_conversation keeps all disconnected persisted message components" do
+    conv_id = :crypto.strong_rand_bytes(16)
+
+    stub(ElixirAi.Data.DbHelpers, :run_sql, fn sql, _params, _topic, _schema ->
+      cond do
+        String.contains?(sql, "FROM text_messages tm") ->
+          [
+            %{
+              id: 4,
+              prev_message_id: 3,
+              prev_message_table: "text_messages",
+              role: "assistant",
+              content: "tail assistant",
+              reasoning_content: nil,
+              tool_choice: nil,
+              input_tokens: nil,
+              output_tokens: nil,
+              tokens_per_second: nil,
+              inserted_at: ~U[2026-06-05 21:00:04Z]
+            },
+            %{
+              id: 1,
+              prev_message_id: nil,
+              prev_message_table: nil,
+              role: "user",
+              content: "head user",
+              reasoning_content: nil,
+              tool_choice: nil,
+              input_tokens: nil,
+              output_tokens: nil,
+              tokens_per_second: nil,
+              inserted_at: ~U[2026-06-05 21:00:01Z]
+            },
+            %{
+              id: 3,
+              prev_message_id: 999,
+              prev_message_table: "tool_response_messages",
+              role: "user",
+              content: "tail user",
+              reasoning_content: nil,
+              tool_choice: nil,
+              input_tokens: nil,
+              output_tokens: nil,
+              tokens_per_second: nil,
+              inserted_at: ~U[2026-06-05 21:00:03Z]
+            },
+            %{
+              id: 2,
+              prev_message_id: 1,
+              prev_message_table: "text_messages",
+              role: "assistant",
+              content: "head assistant",
+              reasoning_content: nil,
+              tool_choice: nil,
+              input_tokens: nil,
+              output_tokens: nil,
+              tokens_per_second: nil,
+              inserted_at: ~U[2026-06-05 21:00:02Z]
+            }
+          ]
+
+        String.contains?(sql, "FROM tool_calls_request_messages tc") ->
+          []
+
+        String.contains?(sql, "FROM tool_response_messages tr") ->
+          []
+
+        true ->
+          []
+      end
+    end)
+
+    messages = ElixirAi.Message.load_for_conversation(conv_id, topic: "test")
+
+    assert Enum.map(messages, & &1.content) == [
+             "head user",
+             "head assistant",
+             "tail user",
+             "tail assistant"
+           ]
+  end
 end

@@ -187,6 +187,10 @@ defmodule ElixirAiWeb.ConversationStreamHandler do
     {:noreply, assign(socket, db_error: reason)}
   end
 
+  def handle({:sandbox_error, reason}, socket) do
+    {:noreply, assign(socket, sandbox_error: reason)}
+  end
+
   def handle(:recovery_restart, socket) do
     {:noreply, assign(socket, streaming_response: nil, ai_error: nil)}
   end

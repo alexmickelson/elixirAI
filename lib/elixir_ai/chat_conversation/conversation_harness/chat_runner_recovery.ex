@@ -53,10 +53,14 @@ defmodule ElixirAi.ChatRunner.Recovery do
         _ -> "auto"
       end
 
-    system_prompt =
+    {system_prompt, sandbox_error} =
       case Task.await(tasks.category, 5_000) do
-        {:ok, category} -> SystemPrompts.for_category(category)
-        _ -> nil
+        {:ok, category} ->
+          prompt_info = SystemPrompts.for_category(category)
+          {prompt_info.prompt, prompt_info.sandbox_error}
+
+        _ ->
+          {nil, nil}
       end
 
     stopped =
@@ -95,6 +99,7 @@ defmodule ElixirAi.ChatRunner.Recovery do
          server_tools: server_tools,
          liveview_tools: liveview_tools,
          provider: provider,
+         sandbox_error: sandbox_error,
          pending_tool_calls: recovered_tool_call_ids,
          current_status: recovered_status,
          stopped: stopped,

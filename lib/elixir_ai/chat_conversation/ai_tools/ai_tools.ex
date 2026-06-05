@@ -62,8 +62,15 @@ defmodule ElixirAi.AiTools do
                {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
             )
 
-            result = execute_command(command)
-            send(server, {:stream, {:tool_response, nil, tool_call_id, result}})
+            case execute_command(command) do
+              {:ok, result} ->
+                send(server, {:error, {:sandbox_error, nil}})
+                send(server, {:stream, {:tool_response, nil, tool_call_id, {:ok, result}}})
+
+              {:error, reason} ->
+                send(server, {:error, {:sandbox_error, reason}})
+                send(server, {:stream, {:tool_response, nil, tool_call_id, {:error, reason}}})
+            end
 
           {:needs_approval, justification} ->
             Phoenix.PubSub.broadcast(
@@ -147,33 +154,49 @@ defmodule ElixirAi.AiTools do
           topic = ElixirAi.PubsubTopics.conversation_message_topic(name)
 
           case ElixirAi.CommandApproval.classify(command) do
-              {:auto_allow, justification} ->
-                ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
-                  justification: justification,
-                  topic: topic
-                )
+            {:auto_allow, justification} ->
+              ElixirAi.Message.update_approval_decision(tool_call_id, "auto_allowed",
+                justification: justification,
+                topic: topic
+              )
 
-                Phoenix.PubSub.broadcast(
-                  ElixirAi.PubSub,
-                  chat_topic(name),
-                  {:conversation_stream_message,
-                   {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
-                )
+              Phoenix.PubSub.broadcast(
+                ElixirAi.PubSub,
+                chat_topic(name),
+                {:conversation_stream_message,
+                 {:tool_approval_updated, tool_call_id, "auto_allowed", justification}}
+              )
 
-                ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
-                forward_cmd_stream(server, current_message_id, tool_call_id)
+              case ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self()) do
+                {:ok, _task_pid} ->
+                  send(server, {:error, {:sandbox_error, nil}})
+                  forward_cmd_stream(server, current_message_id, tool_call_id)
 
-              {:needs_approval, justification} ->
-                Phoenix.PubSub.broadcast(
-                  ElixirAi.PubSub,
-                  chat_topic(name),
-                  {:conversation_stream_message,
-                   {:tool_approval_updated, tool_call_id, "awaiting_approval", justification}}
-                )
+                {:error, reason} ->
+                  send(server, {:error, {:sandbox_error, reason}})
 
-                ref = make_ref()
-                send(server, {:pending_approval, ref, current_message_id, tool_call_id, command, justification})
-            end
+                  send(
+                    server,
+                    {:stream,
+                     {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+                  )
+              end
+
+            {:needs_approval, justification} ->
+              Phoenix.PubSub.broadcast(
+                ElixirAi.PubSub,
+                chat_topic(name),
+                {:conversation_stream_message,
+                 {:tool_approval_updated, tool_call_id, "awaiting_approval", justification}}
+              )
+
+              ref = make_ref()
+
+              send(
+                server,
+                {:pending_approval, ref, current_message_id, tool_call_id, command, justification}
+              )
+          end
         rescue
           e ->
             reason = Exception.format(:error, e, __STACKTRACE__)
@@ -196,7 +219,7 @@ defmodule ElixirAi.AiTools do
         {:ok, ElixirAi.CommandRunner.Presentation.format(result)}
 
       {:error, reason} ->
-        {:ok, "[error] runner unavailable: #{reason}\n[exit:1 | 0ms]"}
+        {:error, reason}
     end
   end
 
@@ -231,8 +254,19 @@ defmodule ElixirAi.AiTools do
   def execute_approved_run(server, current_message_id, tool_call_id, command) do
     Task.start_link(fn ->
       try do
-        ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self())
-        forward_cmd_stream(server, current_message_id, tool_call_id)
+        case ElixirAi.CommandRunner.run_bash_stream(command, tool_call_id, self()) do
+          {:ok, _task_pid} ->
+            send(server, {:error, {:sandbox_error, nil}})
+            forward_cmd_stream(server, current_message_id, tool_call_id)
+
+          {:error, reason} ->
+            send(server, {:error, {:sandbox_error, reason}})
+
+            send(
+              server,
+              {:stream, {:tool_response, current_message_id, tool_call_id, {:error, reason}}}
+            )
+        end
       rescue
         e ->
           reason = Exception.format(:error, e, __STACKTRACE__)

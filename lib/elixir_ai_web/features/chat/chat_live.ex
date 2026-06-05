@@ -67,6 +67,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: nil)
+         |> assign(sandbox_error: nil)
          |> assign(ai_error: nil)
          |> assign(runner_status: nil)
          |> assign(recording: :idle)}
@@ -91,6 +92,7 @@ defmodule ElixirAiWeb.ChatLive do
            db_error:
              "The conversation service is not available. Please wait a moment and refresh."
          )
+         |> assign(sandbox_error: nil)
          |> assign(ai_error: nil)
          |> assign(runner_status: nil)
          |> assign(recording: :idle)}
@@ -111,6 +113,7 @@ defmodule ElixirAiWeb.ChatLive do
          |> assign(provider: nil)
          |> assign(providers: AiProvider.all())
          |> assign(db_error: Exception.format(:error, reason))
+         |> assign(sandbox_error: nil)
          |> assign(ai_error: nil)
          |> assign(runner_status: nil)
          |> assign(recording: :idle)}
@@ -136,6 +139,11 @@ defmodule ElixirAiWeb.ChatLive do
       <%= if @ai_error do %>
         <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-red-400 bg-red-950/40" role="alert">
           AI error: {@ai_error}
+        </div>
+      <% end %>
+      <%= if @sandbox_error do %>
+        <div class="mx-4 mt-2 px-3 py-2 rounded text-sm text-amber-300 bg-amber-950/40" role="alert">
+          Sandbox error: {@sandbox_error}
         </div>
       <% end %>
       <div
@@ -461,6 +469,7 @@ defmodule ElixirAiWeb.ChatLive do
       |> assign(streaming_response: conversation.streaming_response)
       |> assign(provider: conversation.provider)
       |> assign(pending_approvals: pending_approvals)
+      |> assign(sandbox_error: Map.get(conversation, :sandbox_error))
       |> assign(runner_status: conversation.current_status)
 
     # Now sync streaming state if there's an active stream
@@ -566,6 +575,7 @@ defmodule ElixirAiWeb.ChatLive do
       {:tool_request_message, _} -> :awaiting_tools
       :tool_calls_finished -> :generating_ai_response
       {:ai_request_error, _} -> :error
+      {:sandbox_error, reason} when is_binary(reason) and reason != "" -> :error
       {:inline_error_message, _} -> :error
       :recovery_restart -> :generating_ai_response
       :stopped -> :idle
