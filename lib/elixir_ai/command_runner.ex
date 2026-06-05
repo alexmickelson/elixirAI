@@ -102,6 +102,7 @@ defmodule ElixirAi.CommandRunner do
   end
 
   def run_bash(shell_command) when is_binary(shell_command) do
+
     self_ref = self()
     gen_id = System.unique_integer([:positive])
     tool_call_id = to_string(gen_id)
@@ -126,6 +127,7 @@ defmodule ElixirAi.CommandRunner do
   end
 
   def execute(command, args \\ []) when is_binary(command) and is_list(args) do
+
     full_command = Enum.join([command | args], " ")
     run_bash(full_command)
   end
