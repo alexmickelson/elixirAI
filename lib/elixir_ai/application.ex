@@ -11,6 +11,7 @@ defmodule ElixirAi.Application do
 
   defp full_children do
     [
+      ElixirAi.CommandRunner.SshConnection,
       ElixirAiWeb.Telemetry,
       repo_child_spec(),
       default_provider_task(),

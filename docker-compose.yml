@@ -42,6 +42,7 @@ services:
         chown -R elixir:elixir /app/_build
         chown -R elixir:elixir /app/deps
         chmod 666 /var/run/docker.sock
+        chown -R elixir:elixir /ssh_keys
         su elixir -c "elixir --sname elixir_ai@node1 --cookie secret_cluster_cookie -S mix phx.server"
       '
     volumes:
@@ -49,7 +50,7 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - ssh_keys:/ssh_keys:ro
+      - ssh_keys:/ssh_keys
     depends_on:
       db:
         condition: service_healthy
@@ -87,6 +88,7 @@ services:
       sh -c '
         chown -R elixir:elixir /app/_build
         chown -R elixir:elixir /app/deps
+        chown -R elixir:elixir /ssh_keys
         su elixir -c "elixir --sname elixir_ai@node2 --cookie secret_cluster_cookie -S mix phx.server"
       '
     volumes:
@@ -94,7 +96,7 @@ services:
       - /app/_build
       - ./providers.yml:/app/providers.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - ssh_keys:/ssh_keys:ro
+      - ssh_keys:/ssh_keys
     depends_on:
       db:
         condition: service_healthy
@@ -118,7 +120,7 @@ services:
       - nix_store:/nix
       - ssh_keys:/ssh_keys
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/22"]
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/22'"]
       interval: 5s
       timeout: 3s
       retries: 12

@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash sandbox
+# Unlock account (set unusable password hash) so sshd allows pubkey auth
+RUN usermod -p '*' sandbox
 
 # Install Nix via Determinate installer (multi-user, no init system)
 RUN curl -sSfL https://install.determinate.systems/nix | sh -s -- install linux \
